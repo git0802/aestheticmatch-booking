@@ -122,7 +122,7 @@ export class AuthService {
           email: workosUser.email,
           firstName: workosUser.firstName || firstName,
           lastName: workosUser.lastName || lastName,
-          role: role || 'OPS_FINANCE', // Default role
+          role: (role as 'CONCIERGE' | 'OPS_FINANCE' | 'ADMIN') || 'CONCIERGE', // Default role
         });
       } catch (dbError) {
         this.logger.error('Failed to save user to database:', dbError);

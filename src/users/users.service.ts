@@ -39,7 +39,7 @@ export class UsersService {
           email: data.email,
           firstName: data.firstName,
           lastName: data.lastName,
-          role: data.role ? UserRole[data.role] : UserRole.OPS_FINANCE,
+          role: data.role ? UserRole[data.role] : UserRole.CONCIERGE,
         },
       });
 

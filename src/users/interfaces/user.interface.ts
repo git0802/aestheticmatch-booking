@@ -3,14 +3,14 @@ export interface CreateUserData {
   email: string;
   firstName: string;
   lastName: string;
-  role?: 'CONCIERGE' | 'OPS_FINANCE' | 'OPS_MARKETING';
+  role?: 'CONCIERGE' | 'OPS_FINANCE' | 'ADMIN';
 }
 
 export interface UpdateUserData {
   email?: string;
   firstName?: string;
   lastName?: string;
-  role?: 'CONCIERGE' | 'OPS_FINANCE' | 'OPS_MARKETING';
+  role?: 'CONCIERGE' | 'OPS_FINANCE' | 'ADMIN';
 }
 
 export interface UserResponse {

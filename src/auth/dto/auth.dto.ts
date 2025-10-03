@@ -47,6 +47,22 @@ export class ResetPasswordDto {
   password: string;
 }
 
+export class VerifyEmailDto {
+  @IsString()
+  @IsNotEmpty()
+  userId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  code: string;
+}
+
+export class ResendVerificationDto {
+  @IsString()
+  @IsNotEmpty()
+  userId: string;
+}
+
 export class AuthResponseDto {
   success: boolean;
   message?: string;

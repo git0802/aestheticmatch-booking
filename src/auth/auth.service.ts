@@ -14,6 +14,8 @@ import {
   SignupDto,
   ForgotPasswordDto,
   ResetPasswordDto,
+  VerifyEmailDto,
+  ResendVerificationDto,
 } from './dto/auth.dto';
 
 @Injectable()
@@ -254,5 +256,97 @@ export class AuthService {
 
   async validateUser(payload: JwtPayload): Promise<User | null> {
     return this.getUserById(payload.sub);
+  }
+
+  async verifyEmail(
+    verifyEmailDto: VerifyEmailDto,
+  ): Promise<{ message: string; user?: User; accessToken?: string }> {
+    try {
+      const { userId, code } = verifyEmailDto;
+
+      // Verify the email with WorkOS
+      const { user } = await this.workos.userManagement.verifyEmail({
+        userId,
+        code,
+      });
+
+      // If verification is successful, generate JWT token for immediate login
+      const payload: JwtPayload = {
+        sub: user.id,
+        email: user.email,
+        firstName: user.firstName || undefined,
+        lastName: user.lastName || undefined,
+        emailVerified: user.emailVerified,
+      };
+
+      const jwtToken = this.jwtService.sign(payload);
+
+      const userResponse: User = {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName || undefined,
+        lastName: user.lastName || undefined,
+        profilePictureUrl: user.profilePictureUrl || undefined,
+        emailVerified: user.emailVerified,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      };
+
+      return {
+        message: 'Email verified successfully',
+        user: userResponse,
+        accessToken: jwtToken,
+      };
+    } catch (error: any) {
+      this.logger.error('Email verification error:', error);
+
+      if (
+        error.message?.includes('Invalid code') ||
+        error.message?.includes('expired')
+      ) {
+        throw new BadRequestException('Invalid or expired verification code');
+      }
+
+      throw new BadRequestException('Failed to verify email');
+    }
+  }
+
+  async resendVerificationEmail(
+    resendVerificationDto: ResendVerificationDto,
+  ): Promise<{ message: string }> {
+    try {
+      const { userId } = resendVerificationDto;
+
+      // Check if user exists
+      const user = await this.getUserById(userId);
+      if (!user) {
+        throw new BadRequestException('User not found');
+      }
+
+      if (user.emailVerified) {
+        throw new BadRequestException('Email is already verified');
+      }
+
+      // Resend verification email
+      await this.workos.userManagement.sendVerificationEmail({
+        userId,
+      });
+
+      return {
+        message: 'Verification email sent successfully',
+      };
+    } catch (error: any) {
+      this.logger.error('Resend verification error:', error);
+
+      if (error.message?.includes('User not found')) {
+        throw new BadRequestException('User not found');
+      }
+
+      if (error.message?.includes('already verified')) {
+        throw new BadRequestException('Email is already verified');
+      }
+
+      throw new BadRequestException('Failed to resend verification email');
+    }
   }
 }

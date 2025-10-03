@@ -14,6 +14,8 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
   AuthResponseDto,
+  VerifyEmailDto,
+  ResendVerificationDto,
 } from './dto/auth.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GetUser } from './decorators/get-user.decorator';
@@ -134,5 +136,52 @@ export class AuthController {
       success: true,
       message: 'Logged out successfully',
     };
+  }
+
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  async verifyEmail(
+    @Body() verifyEmailDto: VerifyEmailDto,
+  ): Promise<AuthResponseDto> {
+    try {
+      const { message, user, accessToken } =
+        await this.authService.verifyEmail(verifyEmailDto);
+
+      return {
+        success: true,
+        message,
+        user: user
+          ? {
+              id: user.id,
+              email: user.email,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              emailVerified: user.emailVerified,
+            }
+          : undefined,
+        accessToken,
+      };
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  async resendVerification(
+    @Body() resendVerificationDto: ResendVerificationDto,
+  ): Promise<AuthResponseDto> {
+    try {
+      const { message } = await this.authService.resendVerificationEmail(
+        resendVerificationDto,
+      );
+
+      return {
+        success: true,
+        message,
+      };
+    } catch (error) {
+      throw error;
+    }
   }
 }

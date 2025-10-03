@@ -1,4 +1,17 @@
-import { IsEmail, IsString, MinLength, IsNotEmpty } from 'class-validator';
+import {
+  IsEmail,
+  IsString,
+  MinLength,
+  IsNotEmpty,
+  IsOptional,
+  IsEnum,
+} from 'class-validator';
+
+export enum UserRole {
+  CONCIERGE = 'CONCIERGE',
+  OPS_FINANCE = 'OPS_FINANCE',
+  OPS_MARKETING = 'OPS_MARKETING',
+}
 
 export class LoginDto {
   @IsEmail()
@@ -28,6 +41,10 @@ export class SignupDto {
   @IsString()
   @IsNotEmpty()
   lastName: string;
+
+  @IsOptional()
+  @IsEnum(UserRole)
+  role?: UserRole;
 }
 
 export class ForgotPasswordDto {

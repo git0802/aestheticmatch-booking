@@ -17,6 +17,7 @@ import {
   VerifyEmailDto,
   ResendVerificationDto,
 } from './dto/auth.dto';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class AuthService {
@@ -28,6 +29,7 @@ export class AuthService {
   constructor(
     private jwtService: JwtService,
     private configService: ConfigService,
+    private usersService: UsersService,
   ) {
     const apiKey = this.configService.get<string>('WORKOS_API_KEY');
     const clientId = this.configService.get<string>('WORKOS_CLIENT_ID');
@@ -102,10 +104,10 @@ export class AuthService {
 
   async signup(signupDto: SignupDto): Promise<{ user: User; message: string }> {
     try {
-      const { email, password, firstName, lastName } = signupDto;
+      const { email, password, firstName, lastName, role } = signupDto;
 
       // Create user with WorkOS
-      const user = await this.workos.userManagement.createUser({
+      const workosUser = await this.workos.userManagement.createUser({
         email,
         password,
         firstName,
@@ -113,20 +115,42 @@ export class AuthService {
         emailVerified: false,
       });
 
+      // Save user to our database
+      try {
+        await this.usersService.createUser({
+          workosId: workosUser.id,
+          email: workosUser.email,
+          firstName: workosUser.firstName || firstName,
+          lastName: workosUser.lastName || lastName,
+          role: role || 'OPS_FINANCE', // Default role
+        });
+      } catch (dbError) {
+        this.logger.error('Failed to save user to database:', dbError);
+        // If database save fails, we should clean up the WorkOS user
+        try {
+          await this.workos.userManagement.deleteUser(workosUser.id);
+        } catch (cleanupError) {
+          this.logger.error('Failed to cleanup WorkOS user:', cleanupError);
+        }
+        throw new BadRequestException(
+          'Failed to create account - database error',
+        );
+      }
+
       // Send email verification
       await this.workos.userManagement.sendVerificationEmail({
-        userId: user.id,
+        userId: workosUser.id,
       });
 
       const userResponse: User = {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName || undefined,
-        lastName: user.lastName || undefined,
-        profilePictureUrl: user.profilePictureUrl || undefined,
-        emailVerified: user.emailVerified,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
+        id: workosUser.id,
+        email: workosUser.email,
+        firstName: workosUser.firstName || undefined,
+        lastName: workosUser.lastName || undefined,
+        profilePictureUrl: workosUser.profilePictureUrl || undefined,
+        emailVerified: workosUser.emailVerified,
+        createdAt: workosUser.createdAt,
+        updatedAt: workosUser.updatedAt,
       };
 
       return {
@@ -141,6 +165,10 @@ export class AuthService {
         throw new ConflictException(
           'An account with this email already exists',
         );
+      }
+
+      if (error instanceof BadRequestException) {
+        throw error;
       }
 
       throw new BadRequestException('Failed to create account');

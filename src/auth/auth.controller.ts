@@ -21,7 +21,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GetUser } from './decorators/get-user.decorator';
 import type { User } from './interfaces/auth.interface';
 
-@Controller('api/auth')
+@Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
@@ -129,13 +129,17 @@ export class AuthController {
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  async logout(): Promise<AuthResponseDto> {
-    // Since we're using JWT tokens, logout is handled client-side
-    // by removing the token from storage
-    return {
-      success: true,
-      message: 'Logged out successfully',
-    };
+  async logout(@GetUser() user: User): Promise<AuthResponseDto> {
+    try {
+      const { message } = await this.authService.logout(user.id);
+
+      return {
+        success: true,
+        message,
+      };
+    } catch (error) {
+      throw error;
+    }
   }
 
   @Post('verify-email')

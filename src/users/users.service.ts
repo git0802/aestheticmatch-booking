@@ -3,20 +3,32 @@ import {
   Logger,
   ConflictException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ConfigService } from '@nestjs/config';
+import { WorkOS } from '@workos-inc/node';
 import {
   CreateUserData,
   UpdateUserData,
   UserResponse,
+  GetUsersQuery,
+  PaginatedUsersResponse,
 } from './interfaces/user.interface';
-import { UserRole } from '@prisma/client';
+import { UserRole, UserStatus } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
+  private workos: WorkOS;
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private configService: ConfigService,
+  ) {
+    const apiKey = this.configService.get<string>('WORKOS_API_KEY');
+    this.workos = new WorkOS(apiKey);
+  }
 
   async createUser(data: CreateUserData): Promise<UserResponse> {
     try {
@@ -50,6 +62,179 @@ export class UsersService {
         throw error;
       }
       throw new Error('Failed to create user');
+    }
+  }
+
+  async getAllUsers(
+    query: GetUsersQuery = {},
+  ): Promise<PaginatedUsersResponse> {
+    try {
+      const { role, search, status, page = 1, limit = 10 } = query;
+      const skip = (page - 1) * limit;
+
+      // Build where clause
+      const where: any = {};
+
+      if (role && role !== 'all') {
+        where.role = role.toUpperCase();
+      }
+
+      if (status && status !== 'all') {
+        where.status = status.toUpperCase();
+      }
+
+      if (search) {
+        where.OR = [
+          { firstName: { contains: search, mode: 'insensitive' } },
+          { lastName: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
+        ];
+      }
+
+      const [users, total] = await Promise.all([
+        this.prisma.user.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+        }),
+        this.prisma.user.count({ where }),
+      ]);
+
+      return {
+        data: users.map((user) => this.mapUserToResponse(user)),
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      };
+    } catch (error) {
+      this.logger.error('Error fetching users:', error);
+      throw new Error('Failed to fetch users');
+    }
+  }
+
+  async updateUserRole(id: string, role: string): Promise<UserResponse> {
+    try {
+      const user = await this.prisma.user.update({
+        where: { id },
+        data: { role: UserRole[role as keyof typeof UserRole] },
+      });
+
+      return this.mapUserToResponse(user);
+    } catch (error) {
+      this.logger.error('Error updating user role:', error);
+      throw new NotFoundException('User not found');
+    }
+  }
+
+  async inviteUser(inviteData: any): Promise<{ message: string }> {
+    try {
+      // Check if user already exists in our database
+      const existingUser = await this.prisma.user.findUnique({
+        where: { email: inviteData.email },
+      });
+
+      if (existingUser) {
+        throw new ConflictException('User with this email already exists');
+      }
+
+      // Send invitation through WorkOS
+      const invitation = await this.workos.userManagement.sendInvitation({
+        email: inviteData.email,
+        organizationId: this.configService.get<string>(
+          'WORKOS_ORGANIZATION_ID',
+        ),
+        expiresInDays: 7, // Invitation expires in 7 days
+      });
+
+      this.logger.log(
+        `Invitation sent to ${inviteData.email}, ID: ${invitation.id}`,
+      );
+
+      // Create a pending user record with invitation reference
+      const tempWorkosId = `invited_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      await this.prisma.user.create({
+        data: {
+          workosId: tempWorkosId,
+          email: inviteData.email,
+          firstName: inviteData.firstName || 'Pending',
+          lastName: inviteData.lastName || 'User',
+          role: UserRole[inviteData.role as keyof typeof UserRole],
+        },
+      });
+
+      return {
+        message: `User invitation sent successfully to ${inviteData.email}`,
+      };
+    } catch (error) {
+      this.logger.error('Error inviting user:', error);
+      if (error instanceof ConflictException) {
+        throw error;
+      }
+
+      // Handle WorkOS specific errors
+      if (error.response?.status === 422) {
+        throw new BadRequestException(
+          'Invalid email address or organization configuration',
+        );
+      }
+
+      throw new BadRequestException('Failed to send user invitation');
+    }
+  }
+
+  async acceptInvitation(
+    invitationId: string,
+    userData: { firstName: string; lastName: string; password: string },
+  ): Promise<{ message: string }> {
+    try {
+      // Get invitation details from WorkOS
+      const invitation =
+        await this.workos.userManagement.getInvitation(invitationId);
+
+      if (!invitation || invitation.state !== 'pending') {
+        throw new BadRequestException('Invalid or expired invitation');
+      }
+
+      // Find the pending user record
+      const pendingUser = await this.prisma.user.findUnique({
+        where: { email: invitation.email },
+      });
+
+      if (!pendingUser) {
+        throw new NotFoundException('Pending user record not found');
+      }
+
+      // Accept the invitation in WorkOS (this creates the actual WorkOS user)
+      const workosUser = await this.workos.userManagement.createUser({
+        email: invitation.email,
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        password: userData.password,
+      });
+
+      // Update our database with the real WorkOS user ID
+      await this.prisma.user.update({
+        where: { email: invitation.email },
+        data: {
+          workosId: workosUser.id,
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+        },
+      });
+
+      this.logger.log(
+        `Invitation accepted for ${invitation.email}, WorkOS user created: ${workosUser.id}`,
+      );
+
+      return {
+        message: 'Invitation accepted successfully',
+      };
+    } catch (error) {
+      this.logger.error('Error accepting invitation:', error);
+      throw new BadRequestException('Failed to accept invitation');
     }
   }
 
@@ -122,16 +307,44 @@ export class UsersService {
     }
   }
 
-  async getAllUsers(): Promise<UserResponse[]> {
+  async updateUserStatus(
+    workosId: string,
+    status: UserStatus,
+  ): Promise<UserResponse | null> {
     try {
-      const users = await this.prisma.user.findMany({
-        orderBy: { createdAt: 'desc' },
+      const user = await this.prisma.user.update({
+        where: { workosId },
+        data: {
+          status,
+          lastLogin: status === UserStatus.ACTIVE ? new Date() : undefined,
+          updatedAt: new Date(),
+        },
       });
 
-      return users.map((user) => this.mapUserToResponse(user));
+      return this.mapUserToResponse(user);
     } catch (error) {
-      this.logger.error('Error fetching all users:', error);
-      return [];
+      this.logger.error('Error updating user status:', error);
+      return null;
+    }
+  }
+
+  async updateEmailVerification(
+    workosId: string,
+    emailVerified: boolean,
+  ): Promise<UserResponse | null> {
+    try {
+      const user = await this.prisma.user.update({
+        where: { workosId },
+        data: {
+          emailVerified,
+          updatedAt: new Date(),
+        },
+      });
+
+      return this.mapUserToResponse(user);
+    } catch (error) {
+      this.logger.error('Error updating email verification:', error);
+      return null;
     }
   }
 
@@ -143,6 +356,9 @@ export class UsersService {
       firstName: user.firstName,
       lastName: user.lastName,
       role: user.role,
+      status: user.status,
+      emailVerified: user.emailVerified,
+      lastLogin: user.lastLogin,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };

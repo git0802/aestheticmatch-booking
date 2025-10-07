@@ -6,10 +6,20 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Enable CORS for production frontend
+  // Set global prefix
+  app.setGlobalPrefix('api');
+
+  // Enable CORS for development and production
+  const corsOrigins =
+    process.env.NODE_ENV === 'production'
+      ? ['https://api.aestheticmatch.site', 'https://aestheticmatch.site']
+      : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+
   app.enableCors({
-    origin: ['https://api.aestheticmatch.site'],
+    origin: corsOrigins,
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
   // Trust proxy headers from ALB
@@ -27,7 +37,8 @@ async function bootstrap() {
   // Enable global exception filter
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  await app.listen(3001, '0.0.0.0'); // Listen on all interfaces for ECS/ALB health checks
-  console.log('Authentication API running on: http://0.0.0.0:3001/api');
+  const port = process.env.PORT || 3001;
+  await app.listen(port, '0.0.0.0'); // Listen on all interfaces for ECS/ALB health checks
+  console.log(`Authentication API running on: http://0.0.0.0:${port}/api`);
 }
 bootstrap();

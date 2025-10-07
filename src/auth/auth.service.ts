@@ -18,6 +18,7 @@ import {
   ResendVerificationDto,
 } from './dto/auth.dto';
 import { UsersService } from '../users/users.service';
+import { UserStatus } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -64,6 +65,9 @@ export class AuthService {
           password,
           clientId: this.clientId,
         });
+
+      // Update user status to ACTIVE in our database
+      await this.usersService.updateUserStatus(user.id, UserStatus.ACTIVE);
 
       // Generate JWT token
       const payload: JwtPayload = {
@@ -298,6 +302,9 @@ export class AuthService {
         code,
       });
 
+      // Update email verification status in our database
+      await this.usersService.updateEmailVerification(user.id, true);
+
       // If verification is successful, generate JWT token for immediate login
       const payload: JwtPayload = {
         sub: user.id,
@@ -375,6 +382,20 @@ export class AuthService {
       }
 
       throw new BadRequestException('Failed to resend verification email');
+    }
+  }
+
+  async logout(userId: string): Promise<{ message: string }> {
+    try {
+      // Update user status to INACTIVE in our database
+      await this.usersService.updateUserStatus(userId, UserStatus.INACTIVE);
+
+      return {
+        message: 'Logout successful',
+      };
+    } catch (error: any) {
+      this.logger.error('Logout error:', error);
+      throw new BadRequestException('Failed to logout');
     }
   }
 }

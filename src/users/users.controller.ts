@@ -108,6 +108,10 @@ export class UsersController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(JwtAuthGuard)
   async deleteUser(@Param('id') id: string) {
-    await this.usersService.deleteUser(id);
+    try {
+      await this.usersService.deleteUser(id);
+    } catch (error) {
+      throw error; // Re-throw to let NestJS handle the error response
+    }
   }
 }

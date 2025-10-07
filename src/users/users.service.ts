@@ -148,6 +148,8 @@ export class UsersService {
         expiresInDays: 7, // Invitation expires in 7 days
       });
 
+      console.log(invitation);
+
       this.logger.log(
         `Invitation sent to ${inviteData.email}, ID: ${invitation.id}`,
       );
@@ -298,11 +300,58 @@ export class UsersService {
 
   async deleteUser(id: string): Promise<void> {
     try {
+      // First check if user exists
+      const user = await this.prisma.user.findUnique({
+        where: { id },
+      });
+
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+
+      // Check if this is the last admin user
+      if (user.role === UserRole.ADMIN) {
+        const adminCount = await this.prisma.user.count({
+          where: { role: UserRole.ADMIN },
+        });
+
+        if (adminCount <= 1) {
+          throw new BadRequestException(
+            'Cannot delete the last admin user. At least one admin must remain.',
+          );
+        }
+      }
+
+      // Delete from WorkOS first (if it's not a temporary invited user)
+      if (user.workosId) {
+        try {
+          await this.workos.userManagement.deleteUser(user.workosId);
+          this.logger.log(`User deleted from WorkOS: ${user.workosId}`);
+        } catch (workosError: any) {
+          // Log the WorkOS error but continue with local deletion
+          // WorkOS user might already be deleted or not exist
+          this.logger.warn(
+            `Failed to delete user from WorkOS (${user.workosId}): ${workosError.message}`,
+          );
+        }
+      }
+
+      // Delete from local database
       await this.prisma.user.delete({
         where: { id },
       });
+
+      this.logger.log(
+        `User deleted from local database: ${user.email} (${user.id})`,
+      );
     } catch (error) {
       this.logger.error('Error deleting user:', error);
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
+        throw error;
+      }
       throw new NotFoundException('User not found');
     }
   }

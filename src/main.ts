@@ -6,34 +6,14 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Configure CORS for multiple environments
-  const allowedOrigins = [
-    'http://localhost:3000', // Local development
-    'http://localhost:3001', // Local development alternative
-    process.env.FRONTEND_URL, // Environment-specific frontend URL
-    process.env.PRODUCTION_FRONTEND_URL, // Production frontend URL
-  ].filter(Boolean); // Remove undefined values
-
-  console.log('Allowed CORS origins:', allowedOrigins);
-
+  // Enable CORS for production frontend
   app.enableCors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        console.log(`CORS allowed for origin: ${origin}`);
-        return callback(null, true);
-      }
-
-      const msg =
-        'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
-    },
+    origin: ['https://api.aestheticmatch.site'],
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   });
+
+  // Trust proxy headers from ALB
+  app.getHttpAdapter().getInstance().set('trust proxy', true);
 
   // Enable global validation
   app.useGlobalPipes(
@@ -47,9 +27,7 @@ async function bootstrap() {
   // Enable global exception filter
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  await app.listen(process.env.PORT ?? 3001);
-  console.log(
-    `Authentication API running on: http://localhost:${process.env.PORT ?? 3001}`,
-  );
+  await app.listen(3001, '0.0.0.0'); // Listen on all interfaces for ECS/ALB health checks
+  console.log('Authentication API running on: http://0.0.0.0:3001/api');
 }
 bootstrap();

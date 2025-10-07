@@ -161,8 +161,8 @@ export class UsersService {
         data: {
           workosId: tempWorkosId,
           email: inviteData.email,
-          firstName: inviteData.firstName || 'Pending',
-          lastName: inviteData.lastName || 'User',
+          firstName: 'Pending',
+          lastName: 'User',
           role: UserRole[inviteData.role as keyof typeof UserRole],
         },
       });
@@ -237,6 +237,55 @@ export class UsersService {
     } catch (error) {
       this.logger.error('Error accepting invitation:', error);
       throw new BadRequestException('Failed to accept invitation');
+    }
+  }
+
+  async confirmInvitationWithCode(
+    code: string,
+  ): Promise<{ message: string; user: UserResponse }> {
+    console.log('code', code);
+
+    try {
+      // Exchange the authorization code for user information using WorkOS
+      const { user: workosUser } =
+        await this.workos.userManagement.authenticateWithCode({
+          code,
+          clientId: this.configService.get<string>('WORKOS_CLIENT_ID') || '',
+        });
+
+      // Find the pending user record by email
+      const pendingUser = await this.prisma.user.findUnique({
+        where: { email: workosUser.email },
+      });
+
+      if (!pendingUser) {
+        throw new NotFoundException('Pending user record not found');
+      }
+
+      // Update our database with the real WorkOS user ID and names
+      const updatedUser = await this.prisma.user.update({
+        where: { email: workosUser.email },
+        data: {
+          workosId: workosUser.id,
+          firstName: workosUser.firstName || 'Pending',
+          lastName: workosUser.lastName || 'Pending',
+          emailVerified: true,
+        },
+      });
+
+      this.logger.log(
+        `Invitation confirmed for ${workosUser.email}, WorkOS user: ${workosUser.id}`,
+      );
+
+      return {
+        message: 'Invitation confirmed successfully',
+        user: this.mapUserToResponse(updatedUser),
+      };
+    } catch (error) {
+      console.log('error: ', error);
+
+      this.logger.error('Error confirming invitation with code:', error);
+      throw new BadRequestException('Failed to confirm invitation');
     }
   }
 

@@ -19,6 +19,7 @@ import {
   UpdateUserDto,
   InviteUserDto,
   GetUsersQueryDto,
+  ConfirmInvitationDto,
 } from './dto/users.dto';
 
 @Controller('users')
@@ -62,6 +63,18 @@ export class UsersController {
     @Body() userData: { firstName: string; lastName: string; password: string },
   ) {
     return this.usersService.acceptInvitation(invitationId, userData);
+  }
+
+  @Post('confirm-invitation')
+  @HttpCode(HttpStatus.OK)
+  async confirmInvitationWithCode(
+    @Body() confirmInvitationDto: ConfirmInvitationDto,
+  ) {
+    console.log('code: ', confirmInvitationDto);
+
+    return this.usersService.confirmInvitationWithCode(
+      confirmInvitationDto.code,
+    );
   }
 
   @Put(':id')

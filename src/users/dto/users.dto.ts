@@ -63,14 +63,12 @@ export class InviteUserDto {
   @IsEnum(UserRole)
   @IsNotEmpty()
   role: UserRole;
+}
 
-  @IsOptional()
+export class ConfirmInvitationDto {
   @IsString()
-  firstName?: string;
-
-  @IsOptional()
-  @IsString()
-  lastName?: string;
+  @IsNotEmpty()
+  code: string;
 }
 
 export class GetUsersQueryDto {

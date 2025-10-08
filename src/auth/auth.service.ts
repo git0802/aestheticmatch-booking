@@ -80,19 +80,15 @@ export class AuthService {
 
       const jwtToken = this.jwtService.sign(payload);
 
-      const userResponse: User = {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName || undefined,
-        lastName: user.lastName || undefined,
-        profilePictureUrl: user.profilePictureUrl || undefined,
-        emailVerified: user.emailVerified,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-      };
+      // Get user data with role from database
+      const userWithRole = await this.getUserById(user.id);
+
+      if (!userWithRole) {
+        throw new UnauthorizedException('User not found in database');
+      }
 
       return {
-        user: userResponse,
+        user: userWithRole,
         accessToken: jwtToken,
       };
     } catch (error: any) {
@@ -146,19 +142,15 @@ export class AuthService {
         userId: workosUser.id,
       });
 
-      const userResponse: User = {
-        id: workosUser.id,
-        email: workosUser.email,
-        firstName: workosUser.firstName || undefined,
-        lastName: workosUser.lastName || undefined,
-        profilePictureUrl: workosUser.profilePictureUrl || undefined,
-        emailVerified: workosUser.emailVerified,
-        createdAt: workosUser.createdAt,
-        updatedAt: workosUser.updatedAt,
-      };
+      // Get user data with role from database
+      const userWithRole = await this.getUserById(workosUser.id);
+
+      if (!userWithRole) {
+        throw new BadRequestException('Failed to retrieve user data');
+      }
 
       return {
-        user: userResponse,
+        user: userWithRole,
         message:
           'Account created successfully. Please check your email to verify your account.',
       };
@@ -268,17 +260,45 @@ export class AuthService {
 
   async getUserById(id: string): Promise<User | null> {
     try {
-      const user = await this.workos.userManagement.getUser(id);
+      // First, get user from local database to get role and other local data
+      const dbUser = await this.usersService.findByWorkosId(id);
 
+      if (!dbUser) {
+        this.logger.warn(`User not found in database with WorkOS ID: ${id}`);
+        return null;
+      }
+
+      // Get user data from WorkOS for up-to-date profile information
+      let workosUser;
+      try {
+        workosUser = await this.workos.userManagement.getUser(id);
+      } catch (workosError) {
+        this.logger.error('Error fetching user from WorkOS:', workosError);
+        // If WorkOS fails, use database data as fallback
+        return {
+          id: dbUser.workosId,
+          email: dbUser.email,
+          firstName: dbUser.firstName,
+          lastName: dbUser.lastName,
+          role: dbUser.role,
+          profilePictureUrl: undefined,
+          emailVerified: dbUser.emailVerified,
+          createdAt: dbUser.createdAt.toISOString(),
+          updatedAt: dbUser.updatedAt.toISOString(),
+        };
+      }
+
+      // Combine WorkOS data with database data (database takes precedence for role)
       return {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName || undefined,
-        lastName: user.lastName || undefined,
-        profilePictureUrl: user.profilePictureUrl || undefined,
-        emailVerified: user.emailVerified,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
+        id: workosUser.id,
+        email: workosUser.email,
+        firstName: workosUser.firstName || dbUser.firstName,
+        lastName: workosUser.lastName || dbUser.lastName,
+        role: dbUser.role, // Role comes from database
+        profilePictureUrl: workosUser.profilePictureUrl || undefined,
+        emailVerified: workosUser.emailVerified,
+        createdAt: workosUser.createdAt,
+        updatedAt: workosUser.updatedAt,
       };
     } catch (error) {
       this.logger.error('Error fetching user by ID:', error);
@@ -316,20 +336,16 @@ export class AuthService {
 
       const jwtToken = this.jwtService.sign(payload);
 
-      const userResponse: User = {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName || undefined,
-        lastName: user.lastName || undefined,
-        profilePictureUrl: user.profilePictureUrl || undefined,
-        emailVerified: user.emailVerified,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-      };
+      // Get user data with role from database
+      const userWithRole = await this.getUserById(user.id);
+
+      if (!userWithRole) {
+        throw new BadRequestException('Failed to retrieve user data');
+      }
 
       return {
         message: 'Email verified successfully',
-        user: userResponse,
+        user: userWithRole,
         accessToken: jwtToken,
       };
     } catch (error: any) {

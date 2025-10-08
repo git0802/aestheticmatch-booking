@@ -38,6 +38,7 @@ export class AuthController {
           email: user.email,
           firstName: user.firstName,
           lastName: user.lastName,
+          role: user.role,
           emailVerified: user.emailVerified,
         },
         accessToken,
@@ -61,6 +62,7 @@ export class AuthController {
           email: user.email,
           firstName: user.firstName,
           lastName: user.lastName,
+          role: user.role,
           emailVerified: user.emailVerified,
         },
       };
@@ -115,6 +117,7 @@ export class AuthController {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
+        role: user.role,
         emailVerified: user.emailVerified,
       },
     };
@@ -160,6 +163,7 @@ export class AuthController {
               email: user.email,
               firstName: user.firstName,
               lastName: user.lastName,
+              role: user.role,
               emailVerified: user.emailVerified,
             }
           : undefined,

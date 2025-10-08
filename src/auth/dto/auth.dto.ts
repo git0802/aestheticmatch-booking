@@ -10,7 +10,7 @@ import {
 export enum UserRole {
   CONCIERGE = 'CONCIERGE',
   OPS_FINANCE = 'OPS_FINANCE',
-  OPS_MARKETING = 'OPS_MARKETING',
+  ADMIN = 'ADMIN',
 }
 
 export class LoginDto {
@@ -88,6 +88,7 @@ export class AuthResponseDto {
     email: string;
     firstName?: string;
     lastName?: string;
+    role?: string;
     emailVerified: boolean;
   };
   accessToken?: string;

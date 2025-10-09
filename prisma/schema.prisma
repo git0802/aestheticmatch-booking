@@ -41,7 +41,7 @@ model Patient {
   name            String    @db.VarChar(255)
   dob             DateTime  @map("dob") @db.Date
   email           String    @unique @db.VarChar(255)
-  phone           String?   @db.VarChar(20)
+  phone           String?   @db.VarChar(25)
   notes           String?   @db.Text
   amReferralId    String    @unique @map("am_referral_id") @db.Uuid
   createdAt       DateTime  @default(now()) @map("created_at")

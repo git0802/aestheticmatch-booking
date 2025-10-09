@@ -37,15 +37,17 @@ enum UserStatus {
 }
 
 model Patient {
-  id              String    @id @default(uuid()) @db.Uuid
-  name            String    @db.VarChar(255)
-  dob             DateTime  @map("dob") @db.Date
-  email           String    @unique @db.VarChar(255)
-  phone           String?   @db.VarChar(25)
-  notes           String?   @db.Text
-  amReferralId    String    @unique @map("am_referral_id") @db.Uuid
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id                        String    @id @default(uuid()) @db.Uuid
+  name                      String    @db.VarChar(255)
+  dob                       DateTime  @map("dob") @db.Date
+  email                     String    @unique @db.VarChar(255)
+  phone                     String?   @db.VarChar(25)
+  notes                     String?   @db.Text
+  amReferralId              String    @unique @map("am_referral_id") @db.Uuid
+  consentFormsSigned        Boolean?  @default(false) @map("consent_forms_signed")
+  privacyNoticeAcknowledged Boolean?  @default(false) @map("privacy_notice_acknowledged")
+  createdAt                 DateTime  @default(now()) @map("created_at")
+  updatedAt                 DateTime  @updatedAt @map("updated_at")
 
   @@map("patients")
 }

@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsUUID,
   IsDateString,
+  IsBoolean,
   MaxLength,
   MinLength,
   Matches,
@@ -96,6 +97,12 @@ export class CreatePatientDto {
 
   @IsUUID(4)
   amReferralId: string;
+
+  @IsBoolean()
+  consentFormsSigned: boolean;
+
+  @IsBoolean()
+  privacyNoticeAcknowledged: boolean;
 }
 
 export class UpdatePatientDto {
@@ -131,6 +138,14 @@ export class UpdatePatientDto {
   @IsOptional()
   @IsUUID(4)
   amReferralId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  consentFormsSigned?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  privacyNoticeAcknowledged?: boolean;
 }
 
 export class PatientResponseDto {
@@ -141,6 +156,8 @@ export class PatientResponseDto {
   phone?: string;
   notes?: string;
   amReferralId: string;
+  consentFormsSigned?: boolean;
+  privacyNoticeAcknowledged?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

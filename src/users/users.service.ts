@@ -52,6 +52,7 @@ export class UsersService {
           firstName: data.firstName,
           lastName: data.lastName,
           role: data.role ? UserRole[data.role] : UserRole.CONCIERGE,
+          emailVerified: data.emailVerified ?? false,
         },
       });
 

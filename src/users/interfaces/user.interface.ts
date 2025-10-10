@@ -4,6 +4,7 @@ export interface CreateUserData {
   firstName: string;
   lastName: string;
   role?: 'CONCIERGE' | 'OPS_FINANCE' | 'ADMIN';
+  emailVerified?: boolean;
 }
 
 export interface UpdateUserData {

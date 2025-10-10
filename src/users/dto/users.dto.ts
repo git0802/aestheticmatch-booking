@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsEnum,
   IsNumberString,
+  IsBoolean,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { UserRole } from '@prisma/client';
@@ -29,6 +30,10 @@ export class CreateUserDto {
   @IsOptional()
   @IsEnum(UserRole)
   role?: UserRole;
+
+  @IsOptional()
+  @IsBoolean()
+  emailVerified?: boolean;
 }
 
 export class UpdateUserDto {

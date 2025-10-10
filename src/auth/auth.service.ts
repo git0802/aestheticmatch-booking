@@ -116,8 +116,6 @@ export class AuthService {
         emailVerified: false,
       });
 
-      console.log("workosUser: ", workosUser);
-
       // Send email verification
       await this.workos.userManagement.sendVerificationEmail({
         userId: workosUser.id,
@@ -310,6 +308,7 @@ export class AuthService {
             firstName: workosUser.firstName || 'Unknown',
             lastName: workosUser.lastName || 'User',
             role: 'CONCIERGE', // Default role, can be updated later
+            emailVerified: true, // Set to true since email is verified
           });
         } catch (dbError) {
           this.logger.error('Failed to save user to database after verification:', dbError);

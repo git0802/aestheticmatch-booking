@@ -32,7 +32,7 @@ export class PatientsService {
       }
 
       // Build the create data object using proper Prisma types
-      const createData: Prisma.PatientUncheckedCreateInput = {
+      const createData: any = {
         name: createPatientDto.name,
         email: createPatientDto.email,
         phone: createPatientDto.phone,
@@ -61,22 +61,23 @@ export class PatientsService {
         };
       }
 
-      // TODO: Add allergies support once Prisma client recognizes the relation
-      // if (allergies && allergies.length > 0) {
-      //   createData.allergies = {
-      //     create: allergies.map(allergy => ({
-      //       allergyName: allergy.allergyName,
-      //       severity: allergy.severity || 'mild',
-      //       details: allergy.details,
-      //     }))
-      //   };
-      // }
+      // Add allergies if provided
+      if (createPatientDto.allergies && createPatientDto.allergies.length > 0) {
+        createData.allergies = {
+          create: createPatientDto.allergies.map((allergy) => ({
+            allergyName: allergy.allergyName,
+            severity: allergy.severity || 'mild',
+            details: allergy.details,
+          })),
+        };
+      }
 
       const patient = await this.prisma.patient.create({
         data: createData,
         include: {
           pastSurgeries: true,
-        },
+          allergies: true,
+        } as any,
       });
 
       return this.formatPatientResponse(patient);
@@ -113,7 +114,8 @@ export class PatientsService {
       orderBy,
       include: {
         pastSurgeries: true,
-      },
+        allergies: true,
+      } as any,
     });
 
     return patients.map(this.formatPatientResponse);
@@ -124,7 +126,8 @@ export class PatientsService {
       where: { id },
       include: {
         pastSurgeries: true,
-      },
+        allergies: true,
+      } as any,
     });
 
     if (!patient) {
@@ -139,7 +142,8 @@ export class PatientsService {
       where: { email },
       include: {
         pastSurgeries: true,
-      },
+        allergies: true,
+      } as any,
     });
 
     if (!patient) {
@@ -154,7 +158,8 @@ export class PatientsService {
       where: { amReferralId },
       include: {
         pastSurgeries: true,
-      },
+        allergies: true,
+      } as any,
     });
 
     if (!patient) {
@@ -173,7 +178,7 @@ export class PatientsService {
   ): Promise<PatientResponseDto> {
     try {
       // Build the update data object without the nested fields
-      const updateData: Prisma.PatientUncheckedUpdateInput = {
+      const updateData: any = {
         ...(updatePatientDto.name !== undefined && {
           name: updatePatientDto.name,
         }),
@@ -213,24 +218,25 @@ export class PatientsService {
         };
       }
 
-      // TODO: Update allergies support once Prisma client recognizes the relation
-      // if (allergies) {
-      //   updateData.allergies = {
-      //     deleteMany: {},
-      //     create: allergies.map(allergy => ({
-      //       allergyName: allergy.allergyName,
-      //       severity: allergy.severity || 'mild',
-      //       details: allergy.details,
-      //     }))
-      //   };
-      // }
+      // Update allergies if provided
+      if (updatePatientDto.allergies) {
+        updateData.allergies = {
+          deleteMany: {},
+          create: updatePatientDto.allergies.map((allergy) => ({
+            allergyName: allergy.allergyName,
+            severity: allergy.severity || 'mild',
+            details: allergy.details,
+          })),
+        };
+      }
 
       const patient = await this.prisma.patient.update({
         where: { id },
         data: updateData,
         include: {
           pastSurgeries: true,
-        },
+          allergies: true,
+        } as any,
       });
 
       return this.formatPatientResponse(patient);
@@ -296,8 +302,15 @@ export class PatientsService {
           details: surgery.details,
           createdAt: surgery.createdAt,
         })) || [],
-      // TODO: Add allergies support once Prisma client recognizes the relation
-      allergies: [],
+      allergies:
+        patient.allergies?.map((allergy: any) => ({
+          id: allergy.id,
+          patientId: allergy.patientId,
+          allergyName: allergy.allergyName,
+          severity: allergy.severity,
+          details: allergy.details,
+          createdAt: allergy.createdAt,
+        })) || [],
     };
   }
 }

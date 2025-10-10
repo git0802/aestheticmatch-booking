@@ -161,12 +161,11 @@ export class CreatePatientDto {
   @Type(() => CreatePastSurgeryDto)
   pastSurgeries?: CreatePastSurgeryDto[];
 
-  // TODO: Add allergies support once Prisma client recognizes the relation
-  // @IsOptional()
-  // @IsArray()
-  // @ValidateNested({ each: true })
-  // @Type(() => CreateAllergyDto)
-  // allergies?: CreateAllergyDto[];
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateAllergyDto)
+  allergies?: CreateAllergyDto[];
 }
 
 export class UpdatePatientDto {
@@ -217,12 +216,11 @@ export class UpdatePatientDto {
   @Type(() => CreatePastSurgeryDto)
   pastSurgeries?: CreatePastSurgeryDto[];
 
-  // TODO: Add allergies support once Prisma client recognizes the relation
-  // @IsOptional()
-  // @IsArray()
-  // @ValidateNested({ each: true })
-  // @Type(() => CreateAllergyDto)
-  // allergies?: CreateAllergyDto[];
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateAllergyDto)
+  allergies?: CreateAllergyDto[];
 }
 
 export class PatientResponseDto {
@@ -240,6 +238,5 @@ export class PatientResponseDto {
   createdAt: Date;
   updatedAt: Date;
   pastSurgeries?: PastSurgeryResponseDto[];
-  // TODO: Add allergies support once Prisma client recognizes the relation
   allergies?: AllergyResponseDto[];
 }

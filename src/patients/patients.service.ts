@@ -84,12 +84,24 @@ export class PatientsService {
         };
       }
 
+      // Add health flags if provided
+      if (createPatientDto.healthFlags && createPatientDto.healthFlags.length > 0) {
+        createData.healthFlags = {
+          create: createPatientDto.healthFlags.map((healthFlag) => ({
+            flagKey: healthFlag.flagKey,
+            flagValue: healthFlag.flagValue,
+            details: healthFlag.details,
+          })),
+        };
+      }
+
       const patient = await this.prisma.patient.create({
         data: createData,
         include: {
           pastSurgeries: true,
           allergies: true,
           medications: true,
+          healthFlags: true,
         } as any,
       });
 
@@ -129,6 +141,7 @@ export class PatientsService {
         pastSurgeries: true,
         allergies: true,
         medications: true,
+        healthFlags: true,
       } as any,
     });
 
@@ -142,6 +155,7 @@ export class PatientsService {
         pastSurgeries: true,
         allergies: true,
         medications: true,
+        healthFlags: true,
       } as any,
     });
 
@@ -159,6 +173,7 @@ export class PatientsService {
         pastSurgeries: true,
         allergies: true,
         medications: true,
+        healthFlags: true,
       } as any,
     });
 
@@ -176,6 +191,7 @@ export class PatientsService {
         pastSurgeries: true,
         allergies: true,
         medications: true,
+        healthFlags: true,
       } as any,
     });
 
@@ -260,6 +276,18 @@ export class PatientsService {
         };
       }
 
+      // Update health flags if provided
+      if (updatePatientDto.healthFlags) {
+        updateData.healthFlags = {
+          deleteMany: {},
+          create: updatePatientDto.healthFlags.map((healthFlag) => ({
+            flagKey: healthFlag.flagKey,
+            flagValue: healthFlag.flagValue,
+            details: healthFlag.details,
+          })),
+        };
+      }
+
       const patient = await this.prisma.patient.update({
         where: { id },
         data: updateData,
@@ -267,6 +295,7 @@ export class PatientsService {
           pastSurgeries: true,
           allergies: true,
           medications: true,
+          healthFlags: true,
         } as any,
       });
 
@@ -351,6 +380,15 @@ export class PatientsService {
           frequency: medication.frequency,
           details: medication.details,
           createdAt: medication.createdAt,
+        })) || [],
+      healthFlags:
+        patient.healthFlags?.map((healthFlag: any) => ({
+          id: healthFlag.id,
+          patientId: healthFlag.patientId,
+          flagKey: healthFlag.flagKey,
+          flagValue: healthFlag.flagValue,
+          details: healthFlag.details,
+          createdAt: healthFlag.createdAt,
         })) || [],
     };
   }

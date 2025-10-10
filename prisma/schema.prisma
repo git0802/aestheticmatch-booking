@@ -61,6 +61,7 @@ model Patient {
   pastSurgeries PatientPastSurgery[]
   allergies PatientAllergy[]
   medications PatientMedication[]
+  healthFlags PatientHealthFlag[]
 
   @@map("patients")
 }
@@ -112,4 +113,18 @@ model PatientMedication {
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   @@map("patient_medications")
+}
+
+model PatientHealthFlag {
+  id        String   @id @default(uuid()) @db.Uuid
+  patientId String   @map("patient_id") @db.Uuid
+  flagKey   String   @map("flag_key") @db.VarChar(50)
+  flagValue Boolean  @map("flag_value")
+  details   String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("patient_health_flags")
 }

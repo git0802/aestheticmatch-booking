@@ -149,6 +149,29 @@ export class MedicationResponseDto {
   createdAt: Date;
 }
 
+export class CreateHealthFlagDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  flagKey: string;
+
+  @IsBoolean()
+  flagValue: boolean;
+
+  @IsOptional()
+  @IsString()
+  details?: string;
+}
+
+export class HealthFlagResponseDto {
+  id: string;
+  patientId: string;
+  flagKey: string;
+  flagValue: boolean;
+  details?: string;
+  createdAt: Date;
+}
+
 export class CreatePatientDto {
   @IsString()
   @IsNotEmpty()
@@ -203,6 +226,12 @@ export class CreatePatientDto {
   @ValidateNested({ each: true })
   @Type(() => CreateMedicationDto)
   medications?: CreateMedicationDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateHealthFlagDto)
+  healthFlags?: CreateHealthFlagDto[];
 }
 
 export class UpdatePatientDto {
@@ -264,6 +293,12 @@ export class UpdatePatientDto {
   @ValidateNested({ each: true })
   @Type(() => CreateMedicationDto)
   medications?: CreateMedicationDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateHealthFlagDto)
+  healthFlags?: CreateHealthFlagDto[];
 }
 
 export class PatientResponseDto {
@@ -283,4 +318,5 @@ export class PatientResponseDto {
   pastSurgeries?: PastSurgeryResponseDto[];
   allergies?: AllergyResponseDto[];
   medications?: MedicationResponseDto[];
+  healthFlags?: HealthFlagResponseDto[];
 }

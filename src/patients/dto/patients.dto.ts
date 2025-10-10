@@ -118,6 +118,37 @@ export class AllergyResponseDto {
   createdAt: Date;
 }
 
+export class CreateMedicationDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  medicationName: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  dosage?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  frequency?: string;
+
+  @IsOptional()
+  @IsString()
+  details?: string;
+}
+
+export class MedicationResponseDto {
+  id: string;
+  patientId: string;
+  medicationName: string;
+  dosage?: string;
+  frequency?: string;
+  details?: string;
+  createdAt: Date;
+}
+
 export class CreatePatientDto {
   @IsString()
   @IsNotEmpty()
@@ -166,6 +197,12 @@ export class CreatePatientDto {
   @ValidateNested({ each: true })
   @Type(() => CreateAllergyDto)
   allergies?: CreateAllergyDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateMedicationDto)
+  medications?: CreateMedicationDto[];
 }
 
 export class UpdatePatientDto {
@@ -221,6 +258,12 @@ export class UpdatePatientDto {
   @ValidateNested({ each: true })
   @Type(() => CreateAllergyDto)
   allergies?: CreateAllergyDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateMedicationDto)
+  medications?: CreateMedicationDto[];
 }
 
 export class PatientResponseDto {
@@ -239,4 +282,5 @@ export class PatientResponseDto {
   updatedAt: Date;
   pastSurgeries?: PastSurgeryResponseDto[];
   allergies?: AllergyResponseDto[];
+  medications?: MedicationResponseDto[];
 }

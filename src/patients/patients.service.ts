@@ -72,11 +72,24 @@ export class PatientsService {
         };
       }
 
+      // Add medications if provided
+      if (createPatientDto.medications && createPatientDto.medications.length > 0) {
+        createData.medications = {
+          create: createPatientDto.medications.map((medication) => ({
+            medicationName: medication.medicationName,
+            dosage: medication.dosage,
+            frequency: medication.frequency,
+            details: medication.details,
+          })),
+        };
+      }
+
       const patient = await this.prisma.patient.create({
         data: createData,
         include: {
           pastSurgeries: true,
           allergies: true,
+          medications: true,
         } as any,
       });
 
@@ -115,6 +128,7 @@ export class PatientsService {
       include: {
         pastSurgeries: true,
         allergies: true,
+        medications: true,
       } as any,
     });
 
@@ -127,6 +141,7 @@ export class PatientsService {
       include: {
         pastSurgeries: true,
         allergies: true,
+        medications: true,
       } as any,
     });
 
@@ -143,6 +158,7 @@ export class PatientsService {
       include: {
         pastSurgeries: true,
         allergies: true,
+        medications: true,
       } as any,
     });
 
@@ -159,6 +175,7 @@ export class PatientsService {
       include: {
         pastSurgeries: true,
         allergies: true,
+        medications: true,
       } as any,
     });
 
@@ -230,12 +247,26 @@ export class PatientsService {
         };
       }
 
+      // Update medications if provided
+      if (updatePatientDto.medications) {
+        updateData.medications = {
+          deleteMany: {},
+          create: updatePatientDto.medications.map((medication) => ({
+            medicationName: medication.medicationName,
+            dosage: medication.dosage,
+            frequency: medication.frequency,
+            details: medication.details,
+          })),
+        };
+      }
+
       const patient = await this.prisma.patient.update({
         where: { id },
         data: updateData,
         include: {
           pastSurgeries: true,
           allergies: true,
+          medications: true,
         } as any,
       });
 
@@ -310,6 +341,16 @@ export class PatientsService {
           severity: allergy.severity,
           details: allergy.details,
           createdAt: allergy.createdAt,
+        })) || [],
+      medications:
+        patient.medications?.map((medication: any) => ({
+          id: medication.id,
+          patientId: medication.patientId,
+          medicationName: medication.medicationName,
+          dosage: medication.dosage,
+          frequency: medication.frequency,
+          details: medication.details,
+          createdAt: medication.createdAt,
         })) || [],
     };
   }

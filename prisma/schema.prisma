@@ -60,6 +60,7 @@ model Patient {
   updatedByUser User @relation("PatientUpdatedBy", fields: [updatedBy], references: [id])
   pastSurgeries PatientPastSurgery[]
   allergies PatientAllergy[]
+  medications PatientMedication[]
 
   @@map("patients")
 }
@@ -96,4 +97,19 @@ model PatientAllergy {
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   @@map("patient_allergies")
+}
+
+model PatientMedication {
+  id             String   @id @default(uuid()) @db.Uuid
+  patientId      String   @map("patient_id") @db.Uuid
+  medicationName String   @map("medication_name") @db.VarChar(100)
+  dosage         String?  @db.VarChar(50)
+  frequency      String?  @db.VarChar(50)
+  details        String?  @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relations
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("patient_medications")
 }

@@ -105,7 +105,7 @@ export class AuthService {
     userId: string;
   }> {
     try {
-      const { email, password, firstName, lastName } = signupDto;
+      const { email, password, firstName, lastName, role } = signupDto;
 
       // Create user with WorkOS
       const workosUser = await this.workos.userManagement.createUser({
@@ -123,19 +123,22 @@ export class AuthService {
         userId: workosUser.id,
       });
 
-      // Get user data with role from database
-      const userWithRole = await this.getUserById(workosUser.id);
-
-      if (!userWithRole) {
-        throw new BadRequestException('Failed to retrieve user data');
-      }
-
       return {
-        user: userWithRole,
+        user: {
+          id: workosUser.id, // WorkOS ID temporarily for frontend
+          email: workosUser.email,
+          firstName: workosUser.firstName || undefined,
+          lastName: workosUser.lastName || undefined,
+          role: (role as 'CONCIERGE' | 'OPS_FINANCE' | 'ADMIN') || 'CONCIERGE',
+          emailVerified: workosUser.emailVerified,
+          profilePictureUrl: workosUser.profilePictureUrl || undefined,
+          createdAt: workosUser.createdAt,
+          updatedAt: workosUser.updatedAt,
+        },
         message:
           'Account created successfully. Please check your email to verify your account.',
         id: workosUser.id, // WorkOS ID for email verification
-        userId: workosUser.id, // Database user ID
+        userId: workosUser.id, // Temporarily same as WorkOS ID until verification
       };
     } catch (error: any) {
       this.logger.error('Signup error:', error.message);
@@ -289,14 +292,35 @@ export class AuthService {
     try {
       const { userId, code } = verifyEmailDto;
 
-      // Verify the email with WorkOS
+      // Verify the email with WorkOS (userId should be the WorkOS user ID)
       const { user: workosUser } = await this.workos.userManagement.verifyEmail({
-        userId,
+        userId, // This should be the WorkOS user ID
         code,
       });
 
-      // Update email verification status in our database
-      await this.usersService.updateEmailVerification(workosUser.id, true);
+      // Check if user already exists in database
+      let dbUser = await this.usersService.findByWorkosId(workosUser.id);
+      
+      if (!dbUser) {
+        // Create user in database after successful email verification
+        try {
+          dbUser = await this.usersService.createUser({
+            workosId: workosUser.id,
+            email: workosUser.email,
+            firstName: workosUser.firstName || 'Unknown',
+            lastName: workosUser.lastName || 'User',
+            role: 'CONCIERGE', // Default role, can be updated later
+          });
+        } catch (dbError) {
+          this.logger.error('Failed to save user to database after verification:', dbError);
+          throw new BadRequestException(
+            'Email verified but failed to create account. Please contact support.',
+          );
+        }
+      } else {
+        // Update email verification status if user already exists
+        await this.usersService.updateEmailVerification(workosUser.id, true);
+      }
 
       // If verification is successful, generate JWT token for immediate login
       const payload: JwtPayload = {
@@ -309,42 +333,19 @@ export class AuthService {
 
       const jwtToken = this.jwtService.sign(payload);
 
-      let dbUser;
-      // Save user to our database
-      try {
-        dbUser = await this.usersService.createUser({
-          workosId: workosUser.id,
-          email: workosUser.email,
-          firstName: workosUser.firstName!,
-          lastName: workosUser.lastName!,
-          role: 'CONCIERGE', // Default role
-        });
-      } catch (dbError) {
-        this.logger.error('Failed to save user to database:', dbError);
-        // If database save fails, we should clean up the WorkOS user
-        try {
-          await this.workos.userManagement.deleteUser(workosUser.id);
-        } catch (cleanupError) {
-          this.logger.error('Failed to cleanup WorkOS user:', cleanupError);
-        }
-        throw new BadRequestException(
-          'Failed to create account - database error',
-        );
-      }
-
       return {
         message: 'Email verified successfully',
         user: {
-        id: dbUser.id, // Use database ID, not WorkOS ID
-        email: workosUser.email,
-        firstName: workosUser.firstName || dbUser.firstName,
-        lastName: workosUser.lastName || dbUser.lastName,
-        role: dbUser.role, // Role comes from database
-        profilePictureUrl: workosUser.profilePictureUrl || undefined,
-        emailVerified: workosUser.emailVerified,
-        createdAt: workosUser.createdAt,
-        updatedAt: workosUser.updatedAt,
-      },
+          id: dbUser.id, // Use database ID, not WorkOS ID
+          email: workosUser.email,
+          firstName: workosUser.firstName || dbUser.firstName,
+          lastName: workosUser.lastName || dbUser.lastName,
+          role: dbUser.role, // Role comes from database
+          profilePictureUrl: workosUser.profilePictureUrl || undefined,
+          emailVerified: workosUser.emailVerified,
+          createdAt: workosUser.createdAt,
+          updatedAt: workosUser.updatedAt,
+        },
         accessToken: jwtToken,
       };
     } catch (error: any) {

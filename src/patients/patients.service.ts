@@ -24,32 +24,56 @@ export class PatientsService {
       // Check if the user exists first
       const userExists = await this.prisma.user.findUnique({
         where: { id: userId },
-        select: { id: true, email: true }
+        select: { id: true, email: true },
       });
-      
+
       if (!userExists) {
         throw new NotFoundException(`User with ID ${userId} not found`);
       }
 
-      // Extract past surgeries from the DTO
-      const { pastSurgeries, ...patientData } = createPatientDto;
-      
+      // Build the create data object using proper Prisma types
+      const createData: Prisma.PatientUncheckedCreateInput = {
+        name: createPatientDto.name,
+        email: createPatientDto.email,
+        phone: createPatientDto.phone,
+        notes: createPatientDto.notes,
+        amReferralId: createPatientDto.amReferralId,
+        consentFormsSigned: createPatientDto.consentFormsSigned,
+        privacyNoticeAcknowledged: createPatientDto.privacyNoticeAcknowledged,
+        dob: new Date(createPatientDto.dob),
+        createdBy: userId,
+        updatedBy: userId,
+      };
+
+      // Add past surgeries if provided
+      if (
+        createPatientDto.pastSurgeries &&
+        createPatientDto.pastSurgeries.length > 0
+      ) {
+        createData.pastSurgeries = {
+          create: createPatientDto.pastSurgeries.map((surgery) => ({
+            surgeryType: surgery.surgeryType,
+            surgeryDate: surgery.surgeryDate
+              ? new Date(surgery.surgeryDate)
+              : null,
+            details: surgery.details,
+          })),
+        };
+      }
+
+      // TODO: Add allergies support once Prisma client recognizes the relation
+      // if (allergies && allergies.length > 0) {
+      //   createData.allergies = {
+      //     create: allergies.map(allergy => ({
+      //       allergyName: allergy.allergyName,
+      //       severity: allergy.severity || 'mild',
+      //       details: allergy.details,
+      //     }))
+      //   };
+      // }
+
       const patient = await this.prisma.patient.create({
-        data: {
-          ...patientData,
-          dob: new Date(patientData.dob),
-          createdBy: userId,
-          updatedBy: userId,
-          ...(pastSurgeries && pastSurgeries.length > 0 && {
-            pastSurgeries: {
-              create: pastSurgeries.map(surgery => ({
-                surgeryType: surgery.surgeryType,
-                surgeryDate: surgery.surgeryDate ? new Date(surgery.surgeryDate) : null,
-                details: surgery.details,
-              }))
-            }
-          })
-        },
+        data: createData,
         include: {
           pastSurgeries: true,
         },
@@ -98,6 +122,9 @@ export class PatientsService {
   async findOne(id: string): Promise<PatientResponseDto> {
     const patient = await this.prisma.patient.findUnique({
       where: { id },
+      include: {
+        pastSurgeries: true,
+      },
     });
 
     if (!patient) {
@@ -110,6 +137,9 @@ export class PatientsService {
   async findByEmail(email: string): Promise<PatientResponseDto> {
     const patient = await this.prisma.patient.findUnique({
       where: { email },
+      include: {
+        pastSurgeries: true,
+      },
     });
 
     if (!patient) {
@@ -122,6 +152,9 @@ export class PatientsService {
   async findByAmReferralId(amReferralId: string): Promise<PatientResponseDto> {
     const patient = await this.prisma.patient.findUnique({
       where: { amReferralId },
+      include: {
+        pastSurgeries: true,
+      },
     });
 
     if (!patient) {
@@ -139,26 +172,62 @@ export class PatientsService {
     userId: string,
   ): Promise<PatientResponseDto> {
     try {
-      // Extract past surgeries from the DTO
-      const { pastSurgeries, ...patientData } = updatePatientDto;
+      // Build the update data object without the nested fields
+      const updateData: Prisma.PatientUncheckedUpdateInput = {
+        ...(updatePatientDto.name !== undefined && {
+          name: updatePatientDto.name,
+        }),
+        ...(updatePatientDto.email !== undefined && {
+          email: updatePatientDto.email,
+        }),
+        ...(updatePatientDto.phone !== undefined && {
+          phone: updatePatientDto.phone,
+        }),
+        ...(updatePatientDto.notes !== undefined && {
+          notes: updatePatientDto.notes,
+        }),
+        ...(updatePatientDto.amReferralId !== undefined && {
+          amReferralId: updatePatientDto.amReferralId,
+        }),
+        ...(updatePatientDto.consentFormsSigned !== undefined && {
+          consentFormsSigned: updatePatientDto.consentFormsSigned,
+        }),
+        ...(updatePatientDto.privacyNoticeAcknowledged !== undefined && {
+          privacyNoticeAcknowledged: updatePatientDto.privacyNoticeAcknowledged,
+        }),
+        ...(updatePatientDto.dob && { dob: new Date(updatePatientDto.dob) }),
+        updatedBy: userId,
+      };
+
+      // Update past surgeries if provided
+      if (updatePatientDto.pastSurgeries) {
+        updateData.pastSurgeries = {
+          deleteMany: {},
+          create: updatePatientDto.pastSurgeries.map((surgery) => ({
+            surgeryType: surgery.surgeryType,
+            surgeryDate: surgery.surgeryDate
+              ? new Date(surgery.surgeryDate)
+              : null,
+            details: surgery.details,
+          })),
+        };
+      }
+
+      // TODO: Update allergies support once Prisma client recognizes the relation
+      // if (allergies) {
+      //   updateData.allergies = {
+      //     deleteMany: {},
+      //     create: allergies.map(allergy => ({
+      //       allergyName: allergy.allergyName,
+      //       severity: allergy.severity || 'mild',
+      //       details: allergy.details,
+      //     }))
+      //   };
+      // }
 
       const patient = await this.prisma.patient.update({
         where: { id },
-        data: {
-          ...patientData,
-          ...(patientData.dob && { dob: new Date(patientData.dob) }),
-          updatedBy: userId,
-          ...(pastSurgeries && {
-            pastSurgeries: {
-              deleteMany: {},
-              create: pastSurgeries.map(surgery => ({
-                surgeryType: surgery.surgeryType,
-                surgeryDate: surgery.surgeryDate ? new Date(surgery.surgeryDate) : null,
-                details: surgery.details,
-              }))
-            }
-          })
-        },
+        data: updateData,
         include: {
           pastSurgeries: true,
         },
@@ -218,14 +287,17 @@ export class PatientsService {
       updatedBy: patient.updatedBy,
       createdAt: patient.createdAt,
       updatedAt: patient.updatedAt,
-      pastSurgeries: patient.pastSurgeries?.map((surgery: any) => ({
-        id: surgery.id,
-        patientId: surgery.patientId,
-        surgeryType: surgery.surgeryType,
-        surgeryDate: surgery.surgeryDate,
-        details: surgery.details,
-        createdAt: surgery.createdAt,
-      })) || [],
+      pastSurgeries:
+        patient.pastSurgeries?.map((surgery: any) => ({
+          id: surgery.id,
+          patientId: surgery.patientId,
+          surgeryType: surgery.surgeryType,
+          surgeryDate: surgery.surgeryDate,
+          details: surgery.details,
+          createdAt: surgery.createdAt,
+        })) || [],
+      // TODO: Add allergies support once Prisma client recognizes the relation
+      allergies: [],
     };
   }
 }

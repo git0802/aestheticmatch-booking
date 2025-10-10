@@ -57,9 +57,10 @@ export class PatientsController {
       : {};
 
     // Apply role-based filtering
-    const roleClause = user.role === 'CONCIERGE' 
-      ? { createdBy: user.id } // CONCIERGE users only see patients they created
-      : {}; // Other roles see all patients
+    const roleClause =
+      user.role === 'CONCIERGE'
+        ? { createdBy: user.id } // CONCIERGE users only see patients they created
+        : {}; // Other roles see all patients
 
     // Combine search and role filtering
     const whereClause = {

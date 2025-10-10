@@ -59,6 +59,7 @@ model Patient {
   createdByUser User @relation("PatientCreatedBy", fields: [createdBy], references: [id])
   updatedByUser User @relation("PatientUpdatedBy", fields: [updatedBy], references: [id])
   pastSurgeries PatientPastSurgery[]
+  allergies PatientAllergy[]
 
   @@map("patients")
 }
@@ -75,4 +76,24 @@ model PatientPastSurgery {
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   @@map("patient_past_surgeries")
+}
+
+enum AllergySeverity {
+  mild
+  moderate
+  severe
+}
+
+model PatientAllergy {
+  id          String          @id @default(uuid()) @db.Uuid
+  patientId   String          @map("patient_id") @db.Uuid
+  allergyName String          @map("allergy_name") @db.VarChar(100)
+  severity    AllergySeverity @default(mild)
+  details     String?         @db.Text
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  // Relations
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("patient_allergies")
 }

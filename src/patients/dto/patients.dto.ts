@@ -12,16 +12,16 @@ import {
   Validate,
   ValidatorConstraint,
   ValidatorConstraintInterface,
-  ValidationArguments,
   IsArray,
   ValidateNested,
+  IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 // Custom validator for age verification
 @ValidatorConstraint({ name: 'isAdult', async: false })
 export class IsAdultConstraint implements ValidatorConstraintInterface {
-  validate(dateString: string, args: ValidationArguments) {
+  validate(dateString: string) {
     const birthDate = new Date(dateString);
     const today = new Date();
     const age = today.getFullYear() - birthDate.getFullYear();
@@ -36,7 +36,7 @@ export class IsAdultConstraint implements ValidatorConstraintInterface {
     return actualAge >= 18 && actualAge <= 120;
   }
 
-  defaultMessage(args: ValidationArguments) {
+  defaultMessage() {
     return 'Patient must be at least 18 years old and no more than 120 years old';
   }
 }
@@ -46,7 +46,7 @@ export class IsAdultConstraint implements ValidatorConstraintInterface {
 export class IsValidPhoneNumberConstraint
   implements ValidatorConstraintInterface
 {
-  validate(phone: string, args: ValidationArguments) {
+  validate(phone: string) {
     if (!phone || phone.trim() === '') {
       return true; // Phone is optional
     }
@@ -65,7 +65,7 @@ export class IsValidPhoneNumberConstraint
     );
   }
 
-  defaultMessage(args: ValidationArguments) {
+  defaultMessage() {
     return 'Phone number must be in valid international format (e.g., +1234567890)';
   }
 }
@@ -90,6 +90,30 @@ export class PastSurgeryResponseDto {
   patientId: string;
   surgeryType: string;
   surgeryDate?: Date;
+  details?: string;
+  createdAt: Date;
+}
+
+export class CreateAllergyDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  allergyName: string;
+
+  @IsOptional()
+  @IsEnum(['mild', 'moderate', 'severe'])
+  severity?: 'mild' | 'moderate' | 'severe';
+
+  @IsOptional()
+  @IsString()
+  details?: string;
+}
+
+export class AllergyResponseDto {
+  id: string;
+  patientId: string;
+  allergyName: string;
+  severity: 'mild' | 'moderate' | 'severe';
   details?: string;
   createdAt: Date;
 }
@@ -136,6 +160,13 @@ export class CreatePatientDto {
   @ValidateNested({ each: true })
   @Type(() => CreatePastSurgeryDto)
   pastSurgeries?: CreatePastSurgeryDto[];
+
+  // TODO: Add allergies support once Prisma client recognizes the relation
+  // @IsOptional()
+  // @IsArray()
+  // @ValidateNested({ each: true })
+  // @Type(() => CreateAllergyDto)
+  // allergies?: CreateAllergyDto[];
 }
 
 export class UpdatePatientDto {
@@ -185,6 +216,13 @@ export class UpdatePatientDto {
   @ValidateNested({ each: true })
   @Type(() => CreatePastSurgeryDto)
   pastSurgeries?: CreatePastSurgeryDto[];
+
+  // TODO: Add allergies support once Prisma client recognizes the relation
+  // @IsOptional()
+  // @IsArray()
+  // @ValidateNested({ each: true })
+  // @Type(() => CreateAllergyDto)
+  // allergies?: CreateAllergyDto[];
 }
 
 export class PatientResponseDto {
@@ -202,4 +240,6 @@ export class PatientResponseDto {
   createdAt: Date;
   updatedAt: Date;
   pastSurgeries?: PastSurgeryResponseDto[];
+  // TODO: Add allergies support once Prisma client recognizes the relation
+  allergies?: AllergyResponseDto[];
 }

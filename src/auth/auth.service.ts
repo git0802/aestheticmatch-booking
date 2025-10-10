@@ -98,10 +98,10 @@ export class AuthService {
     }
   }
 
-  async signup(signupDto: SignupDto): Promise<{ 
-    user: User; 
-    message: string; 
-    id: string; 
+  async signup(signupDto: SignupDto): Promise<{
+    user: User;
+    message: string;
+    id: string;
     userId: string;
   }> {
     try {
@@ -291,14 +291,16 @@ export class AuthService {
       const { userId, code } = verifyEmailDto;
 
       // Verify the email with WorkOS (userId should be the WorkOS user ID)
-      const { user: workosUser } = await this.workos.userManagement.verifyEmail({
-        userId, // This should be the WorkOS user ID
-        code,
-      });
+      const { user: workosUser } = await this.workos.userManagement.verifyEmail(
+        {
+          userId, // This should be the WorkOS user ID
+          code,
+        },
+      );
 
       // Check if user already exists in database
       let dbUser = await this.usersService.findByWorkosId(workosUser.id);
-      
+
       if (!dbUser) {
         // Create user in database after successful email verification
         try {
@@ -311,7 +313,10 @@ export class AuthService {
             emailVerified: true, // Set to true since email is verified
           });
         } catch (dbError) {
-          this.logger.error('Failed to save user to database after verification:', dbError);
+          this.logger.error(
+            'Failed to save user to database after verification:',
+            dbError,
+          );
           throw new BadRequestException(
             'Email verified but failed to create account. Please contact support.',
           );

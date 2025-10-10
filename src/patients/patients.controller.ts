@@ -36,6 +36,7 @@ export class PatientsController {
 
   @Get()
   async findAll(
+    @GetUser() user: User,
     @Query('skip', new ParseIntPipe({ optional: true })) skip?: number,
     @Query('take', new ParseIntPipe({ optional: true })) take?: number,
     @Query('search') search?: string,
@@ -45,7 +46,7 @@ export class PatientsController {
     skip: number;
     take: number;
   }> {
-    const whereClause = search
+    const searchClause = search
       ? {
           OR: [
             { name: { contains: search, mode: 'insensitive' as const } },
@@ -53,7 +54,18 @@ export class PatientsController {
             { phone: { contains: search, mode: 'insensitive' as const } },
           ],
         }
-      : undefined;
+      : {};
+
+    // Apply role-based filtering
+    const roleClause = user.role === 'CONCIERGE' 
+      ? { createdBy: user.id } // CONCIERGE users only see patients they created
+      : {}; // Other roles see all patients
+
+    // Combine search and role filtering
+    const whereClause = {
+      ...searchClause,
+      ...roleClause,
+    };
 
     const [patients, total] = await Promise.all([
       this.patientsService.findAll({

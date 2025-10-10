@@ -92,4 +92,6 @@ export class AuthResponseDto {
     emailVerified: boolean;
   };
   accessToken?: string;
+  userId?: string; // Database user ID
+  id?: string; // WorkOS user ID for email verification
 }

@@ -52,7 +52,7 @@ export class AuthController {
   @HttpCode(HttpStatus.CREATED)
   async signup(@Body() signupDto: SignupDto): Promise<AuthResponseDto> {
     try {
-      const { user, message } = await this.authService.signup(signupDto);
+      const { user, message, id, userId } = await this.authService.signup(signupDto);
 
       return {
         success: true,
@@ -65,6 +65,8 @@ export class AuthController {
           role: user.role,
           emailVerified: user.emailVerified,
         },
+        userId, // Database user ID
+        id, // WorkOS user ID for email verification
       };
     } catch (error) {
       throw error;

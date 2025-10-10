@@ -18,17 +18,20 @@ import {
   PatientResponseDto,
 } from './dto/patients.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { GetUser } from '../auth/decorators/get-user.decorator';
+import type { User } from '../auth/interfaces/auth.interface';
 
 @Controller('patients')
-// @UseGuards(JwtAuthGuard) // Temporarily disabled for testing
+@UseGuards(JwtAuthGuard)
 export class PatientsController {
   constructor(private readonly patientsService: PatientsService) {}
 
   @Post()
   async create(
     @Body() createPatientDto: CreatePatientDto,
+    @GetUser() user: User,
   ): Promise<PatientResponseDto> {
-    return this.patientsService.create(createPatientDto);
+    return this.patientsService.create(createPatientDto, user.id);
   }
 
   @Get()
@@ -95,8 +98,9 @@ export class PatientsController {
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updatePatientDto: UpdatePatientDto,
+    @GetUser() user: User,
   ): Promise<PatientResponseDto> {
-    return this.patientsService.update(id, updatePatientDto);
+    return this.patientsService.update(id, updatePatientDto, user.id);
   }
 
   @Delete(':id')

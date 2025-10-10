@@ -276,7 +276,7 @@ export class AuthService {
         this.logger.error('Error fetching user from WorkOS:', workosError);
         // If WorkOS fails, use database data as fallback
         return {
-          id: dbUser.workosId,
+          id: dbUser.id, // Use database ID, not WorkOS ID
           email: dbUser.email,
           firstName: dbUser.firstName,
           lastName: dbUser.lastName,
@@ -290,7 +290,7 @@ export class AuthService {
 
       // Combine WorkOS data with database data (database takes precedence for role)
       return {
-        id: workosUser.id,
+        id: dbUser.id, // Use database ID, not WorkOS ID
         email: workosUser.email,
         firstName: workosUser.firstName || dbUser.firstName,
         lastName: workosUser.lastName || dbUser.lastName,

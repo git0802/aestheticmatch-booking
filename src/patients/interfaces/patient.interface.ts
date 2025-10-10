@@ -6,6 +6,10 @@ export interface Patient {
   phone?: string;
   notes?: string;
   amReferralId: string;
+  consentFormsSigned?: boolean;
+  privacyNoticeAcknowledged?: boolean;
+  createdBy: string;
+  updatedBy: string;
   createdAt: Date;
   updatedAt: Date;
 }

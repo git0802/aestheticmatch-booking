@@ -18,12 +18,25 @@ export class PatientsService {
 
   async create(
     createPatientDto: CreatePatientDto,
+    userId: string,
   ): Promise<PatientResponseDto> {
     try {
+      // Check if the user exists first
+      const userExists = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, email: true }
+      });
+      
+      if (!userExists) {
+        throw new NotFoundException(`User with ID ${userId} not found`);
+      }
+      
       const patient = await this.prisma.patient.create({
         data: {
           ...createPatientDto,
           dob: new Date(createPatientDto.dob),
+          createdBy: userId,
+          updatedBy: userId,
         },
       });
 
@@ -105,6 +118,7 @@ export class PatientsService {
   async update(
     id: string,
     updatePatientDto: UpdatePatientDto,
+    userId: string,
   ): Promise<PatientResponseDto> {
     try {
       const patient = await this.prisma.patient.update({
@@ -112,6 +126,7 @@ export class PatientsService {
         data: {
           ...updatePatientDto,
           ...(updatePatientDto.dob && { dob: new Date(updatePatientDto.dob) }),
+          updatedBy: userId,
         },
       });
 
@@ -163,6 +178,10 @@ export class PatientsService {
       phone: patient.phone,
       notes: patient.notes,
       amReferralId: patient.amReferralId,
+      consentFormsSigned: patient.consentFormsSigned,
+      privacyNoticeAcknowledged: patient.privacyNoticeAcknowledged,
+      createdBy: patient.createdBy,
+      updatedBy: patient.updatedBy,
       createdAt: patient.createdAt,
       updatedAt: patient.updatedAt,
     };

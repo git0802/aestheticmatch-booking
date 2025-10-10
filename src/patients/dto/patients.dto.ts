@@ -158,6 +158,8 @@ export class PatientResponseDto {
   amReferralId: string;
   consentFormsSigned?: boolean;
   privacyNoticeAcknowledged?: boolean;
+  createdBy: string;
+  updatedBy: string;
   createdAt: Date;
   updatedAt: Date;
 }

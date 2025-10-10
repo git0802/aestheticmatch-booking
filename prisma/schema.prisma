@@ -21,6 +21,10 @@ model User {
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
+  // Relations
+  createdPatients Patient[] @relation("PatientCreatedBy")
+  updatedPatients Patient[] @relation("PatientUpdatedBy")
+
   @@map("users")
 }
 
@@ -46,8 +50,14 @@ model Patient {
   amReferralId              String    @unique @map("am_referral_id") @db.Uuid
   consentFormsSigned        Boolean?  @default(false) @map("consent_forms_signed")
   privacyNoticeAcknowledged Boolean?  @default(false) @map("privacy_notice_acknowledged")
+  createdBy                 String    @map("created_by")
+  updatedBy                 String    @map("updated_by")
   createdAt                 DateTime  @default(now()) @map("created_at")
   updatedAt                 DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  createdByUser User @relation("PatientCreatedBy", fields: [createdBy], references: [id])
+  updatedByUser User @relation("PatientUpdatedBy", fields: [updatedBy], references: [id])
 
   @@map("patients")
 }

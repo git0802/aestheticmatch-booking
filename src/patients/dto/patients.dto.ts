@@ -76,9 +76,9 @@ export class CreatePastSurgeryDto {
   @MaxLength(100)
   surgeryType: string;
 
-  @IsOptional()
   @IsDateString()
-  surgeryDate?: string;
+  @IsNotEmpty()
+  surgeryDate: string;
 
   @IsOptional()
   @IsString()

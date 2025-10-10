@@ -30,13 +30,28 @@ export class PatientsService {
       if (!userExists) {
         throw new NotFoundException(`User with ID ${userId} not found`);
       }
+
+      // Extract past surgeries from the DTO
+      const { pastSurgeries, ...patientData } = createPatientDto;
       
       const patient = await this.prisma.patient.create({
         data: {
-          ...createPatientDto,
-          dob: new Date(createPatientDto.dob),
+          ...patientData,
+          dob: new Date(patientData.dob),
           createdBy: userId,
           updatedBy: userId,
+          ...(pastSurgeries && pastSurgeries.length > 0 && {
+            pastSurgeries: {
+              create: pastSurgeries.map(surgery => ({
+                surgeryType: surgery.surgeryType,
+                surgeryDate: surgery.surgeryDate ? new Date(surgery.surgeryDate) : null,
+                details: surgery.details,
+              }))
+            }
+          })
+        },
+        include: {
+          pastSurgeries: true,
         },
       });
 
@@ -72,6 +87,9 @@ export class PatientsService {
       cursor,
       where,
       orderBy,
+      include: {
+        pastSurgeries: true,
+      },
     });
 
     return patients.map(this.formatPatientResponse);
@@ -121,12 +139,28 @@ export class PatientsService {
     userId: string,
   ): Promise<PatientResponseDto> {
     try {
+      // Extract past surgeries from the DTO
+      const { pastSurgeries, ...patientData } = updatePatientDto;
+
       const patient = await this.prisma.patient.update({
         where: { id },
         data: {
-          ...updatePatientDto,
-          ...(updatePatientDto.dob && { dob: new Date(updatePatientDto.dob) }),
+          ...patientData,
+          ...(patientData.dob && { dob: new Date(patientData.dob) }),
           updatedBy: userId,
+          ...(pastSurgeries && {
+            pastSurgeries: {
+              deleteMany: {},
+              create: pastSurgeries.map(surgery => ({
+                surgeryType: surgery.surgeryType,
+                surgeryDate: surgery.surgeryDate ? new Date(surgery.surgeryDate) : null,
+                details: surgery.details,
+              }))
+            }
+          })
+        },
+        include: {
+          pastSurgeries: true,
         },
       });
 
@@ -184,6 +218,14 @@ export class PatientsService {
       updatedBy: patient.updatedBy,
       createdAt: patient.createdAt,
       updatedAt: patient.updatedAt,
+      pastSurgeries: patient.pastSurgeries?.map((surgery: any) => ({
+        id: surgery.id,
+        patientId: surgery.patientId,
+        surgeryType: surgery.surgeryType,
+        surgeryDate: surgery.surgeryDate,
+        details: surgery.details,
+        createdAt: surgery.createdAt,
+      })) || [],
     };
   }
 }

@@ -58,6 +58,21 @@ model Patient {
   // Relations
   createdByUser User @relation("PatientCreatedBy", fields: [createdBy], references: [id])
   updatedByUser User @relation("PatientUpdatedBy", fields: [updatedBy], references: [id])
+  pastSurgeries PatientPastSurgery[]
 
   @@map("patients")
+}
+
+model PatientPastSurgery {
+  id          String    @id @default(uuid()) @db.Uuid
+  patientId   String    @map("patient_id") @db.Uuid
+  surgeryType String    @map("surgery_type") @db.VarChar(100)
+  surgeryDate DateTime? @map("surgery_date") @db.Date
+  details     String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("patient_past_surgeries")
 }

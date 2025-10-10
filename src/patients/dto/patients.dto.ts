@@ -13,7 +13,10 @@ import {
   ValidatorConstraint,
   ValidatorConstraintInterface,
   ValidationArguments,
+  IsArray,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 
 // Custom validator for age verification
 @ValidatorConstraint({ name: 'isAdult', async: false })
@@ -67,6 +70,30 @@ export class IsValidPhoneNumberConstraint
   }
 }
 
+export class CreatePastSurgeryDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  surgeryType: string;
+
+  @IsOptional()
+  @IsDateString()
+  surgeryDate?: string;
+
+  @IsOptional()
+  @IsString()
+  details?: string;
+}
+
+export class PastSurgeryResponseDto {
+  id: string;
+  patientId: string;
+  surgeryType: string;
+  surgeryDate?: Date;
+  details?: string;
+  createdAt: Date;
+}
+
 export class CreatePatientDto {
   @IsString()
   @IsNotEmpty()
@@ -103,6 +130,12 @@ export class CreatePatientDto {
 
   @IsBoolean()
   privacyNoticeAcknowledged: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreatePastSurgeryDto)
+  pastSurgeries?: CreatePastSurgeryDto[];
 }
 
 export class UpdatePatientDto {
@@ -146,6 +179,12 @@ export class UpdatePatientDto {
   @IsOptional()
   @IsBoolean()
   privacyNoticeAcknowledged?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreatePastSurgeryDto)
+  pastSurgeries?: CreatePastSurgeryDto[];
 }
 
 export class PatientResponseDto {
@@ -162,4 +201,5 @@ export class PatientResponseDto {
   updatedBy: string;
   createdAt: Date;
   updatedAt: Date;
+  pastSurgeries?: PastSurgeryResponseDto[];
 }

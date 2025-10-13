@@ -4,11 +4,11 @@ import { ProcedureCategory, FeeRule } from './create-procedure.dto';
 
 export class QueryProceduresDto {
   @IsOptional()
-  @IsNumberString()
+  @Type(() => Number)
   page?: number;
 
   @IsOptional()
-  @IsNumberString()
+  @Type(() => Number)
   limit?: number;
 
   @IsOptional()

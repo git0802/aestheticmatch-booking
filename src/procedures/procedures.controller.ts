@@ -13,10 +13,9 @@ import { ProceduresService } from './procedures.service';
 import { CreateProcedureDto } from './dto/create-procedure.dto';
 import { UpdateProcedureDto } from './dto/update-procedure.dto';
 import { QueryProceduresDto } from './dto/query-procedures.dto';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RoleGuard } from '../auth/role.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { GetUser } from '../auth/decorators/user.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { GetUser } from '../auth/decorators/get-user.decorator';
+import type { User } from '../auth/interfaces/auth.interface';
 
 @Controller('procedures')
 @UseGuards(JwtAuthGuard)
@@ -24,42 +23,42 @@ export class ProceduresController {
   constructor(private readonly proceduresService: ProceduresService) {}
 
   @Post()
-  @UseGuards(RoleGuard)
-  @Roles('ADMIN')
-  create(@Body() createProcedureDto: CreateProcedureDto, @GetUser() user: any) {
-    return this.proceduresService.create(createProcedureDto, user.id);
+  create(
+    @Body() createProcedureDto: CreateProcedureDto,
+    @GetUser() user: User,
+  ) {
+    return this.proceduresService.create(createProcedureDto, user);
   }
 
   @Get()
-  findAll(@Query() query: QueryProceduresDto) {
+  findAll(@Query() query: QueryProceduresDto, @GetUser() user: User) {
     return this.proceduresService.findAll(query);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id') id: string, @GetUser() user: User) {
     return this.proceduresService.findOne(id);
   }
 
   @Get('practice/:practiceId')
-  findByPractice(@Param('practiceId') practiceId: string) {
+  findByPractice(
+    @Param('practiceId') practiceId: string,
+    @GetUser() user: User,
+  ) {
     return this.proceduresService.findByPractice(practiceId);
   }
 
   @Patch(':id')
-  @UseGuards(RoleGuard)
-  @Roles('ADMIN')
   update(
     @Param('id') id: string,
     @Body() updateProcedureDto: UpdateProcedureDto,
-    @GetUser() user: any,
+    @GetUser() user: User,
   ) {
-    return this.proceduresService.update(id, updateProcedureDto, user.id);
+    return this.proceduresService.update(id, updateProcedureDto, user);
   }
 
   @Delete(':id')
-  @UseGuards(RoleGuard)
-  @Roles('ADMIN')
-  remove(@Param('id') id: string) {
-    return this.proceduresService.remove(id);
+  remove(@Param('id') id: string, @GetUser() user: User) {
+    return this.proceduresService.remove(id, user);
   }
 }

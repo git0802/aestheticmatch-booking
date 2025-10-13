@@ -2,23 +2,35 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProcedureDto } from './dto/create-procedure.dto';
 import { UpdateProcedureDto } from './dto/update-procedure.dto';
 import { QueryProceduresDto } from './dto/query-procedures.dto';
 import { Prisma } from '@prisma/client';
+import type { User } from '../auth/interfaces/auth.interface';
 
 @Injectable()
 export class ProceduresService {
   constructor(private prisma: PrismaService) {}
 
-  async create(createProcedureDto: CreateProcedureDto, createdBy: string) {
+  private checkAdminRole(user: User) {
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenException(
+        'Only administrators can perform this action',
+      );
+    }
+  }
+
+  async create(createProcedureDto: CreateProcedureDto, user: User) {
+    this.checkAdminRole(user);
+
     try {
       const procedure = await this.prisma.procedure.create({
         data: {
           ...createProcedureDto,
-          createdBy,
+          createdBy: user.id,
         },
         include: {
           createdByUser: {
@@ -61,8 +73,12 @@ export class ProceduresService {
       practiceId,
     } = query;
 
-    const skip = (page - 1) * limit;
-    const take = limit;
+    // Ensure page and limit are numbers and have sensible defaults
+    const pageNum = Number(page) || 1;
+    const limitNum = Math.min(Number(limit) || 20, 100); // Cap at 100 items per page
+
+    const skip = (pageNum - 1) * limitNum;
+    const take = limitNum;
 
     const where: Prisma.ProcedureWhereInput = {};
 
@@ -118,8 +134,8 @@ export class ProceduresService {
     return {
       procedures,
       total,
-      page,
-      limit,
+      page: pageNum,
+      limit: limitNum,
     };
   }
 
@@ -182,11 +198,9 @@ export class ProceduresService {
     return procedures;
   }
 
-  async update(
-    id: string,
-    updateProcedureDto: UpdateProcedureDto,
-    updatedBy: string,
-  ) {
+  async update(id: string, updateProcedureDto: UpdateProcedureDto, user: User) {
+    this.checkAdminRole(user);
+
     const existingProcedure = await this.prisma.procedure.findUnique({
       where: { id },
     });
@@ -200,7 +214,7 @@ export class ProceduresService {
         where: { id },
         data: {
           ...updateProcedureDto,
-          updatedBy,
+          updatedBy: user.id,
         },
         include: {
           createdByUser: {
@@ -233,7 +247,9 @@ export class ProceduresService {
     }
   }
 
-  async remove(id: string) {
+  async remove(id: string, user: User) {
+    this.checkAdminRole(user);
+
     const existingProcedure = await this.prisma.procedure.findUnique({
       where: { id },
     });

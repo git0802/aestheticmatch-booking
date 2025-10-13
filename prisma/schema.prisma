@@ -24,6 +24,8 @@ model User {
   // Relations
   createdPatients Patient[] @relation("PatientCreatedBy")
   updatedPatients Patient[] @relation("PatientUpdatedBy")
+  createdProcedures Procedure[] @relation("ProcedureCreatedBy")
+  updatedProcedures Procedure[] @relation("ProcedureUpdatedBy")
 
   @@map("users")
 }
@@ -127,4 +129,35 @@ model PatientHealthFlag {
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   @@map("patient_health_flags")
+}
+
+enum ProcedureCategory {
+  SURGICAL
+  NON_SURGICAL
+}
+
+enum FeeRule {
+  TIER_A
+  TIER_B
+  CONSULT
+  SURGERY
+}
+
+model Procedure {
+  id             String            @id @default(uuid()) @db.Uuid
+  name           String            @db.VarChar(255)
+  category       ProcedureCategory
+  defaultFeeRule FeeRule           @map("default_fee_rule")
+  feeAmount      Decimal           @map("fee_amount") @db.Decimal(10, 2)
+  linkedPractices String[]         @map("linked_practices") @db.Uuid
+  createdBy      String            @map("created_by")
+  updatedBy      String?           @map("updated_by")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  createdByUser User @relation("ProcedureCreatedBy", fields: [createdBy], references: [id])
+  updatedByUser User? @relation("ProcedureUpdatedBy", fields: [updatedBy], references: [id])
+
+  @@map("procedures")
 }

@@ -26,13 +26,13 @@ export class PracticesController {
   }
 
   @Get()
-  findAll() {
-    return this.practicesService.findAll();
+  findAll(@GetUser() user: User) {
+    return this.practicesService.findAll(user);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.practicesService.findOne(id);
+  findOne(@Param('id') id: string, @GetUser() user: User) {
+    return this.practicesService.findOne(id, user);
   }
 
   @Put(':id')

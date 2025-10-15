@@ -14,16 +14,13 @@ import type { User } from '../auth/interfaces/auth.interface';
 export class PracticesService {
   constructor(private prisma: PrismaService) {}
 
-  private checkAdminRole(user: User) {
-    if (user.role !== 'ADMIN') {
+  async create(createPracticeDto: CreatePracticeDto, user: User) {
+    // Allow ADMIN and CONCIERGE to create practices
+    if (!user.role || !['ADMIN', 'CONCIERGE'].includes(user.role)) {
       throw new ForbiddenException(
-        'Only administrators can perform this action',
+        'Only admin and concierge users can create practices',
       );
     }
-  }
-
-  async create(createPracticeDto: CreatePracticeDto, user: User) {
-    this.checkAdminRole(user);
 
     try {
       const practice = await this.prisma.practice.create({
@@ -32,6 +29,16 @@ export class PracticesService {
           emrType: createPracticeDto.emrType || null,
           connectorConfig: createPracticeDto.connectorConfig || null,
           feeModel: createPracticeDto.feeModel || null,
+          createdBy: user.id,
+        },
+        include: {
+          createdByUser: {
+            select: {
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
         },
       });
 
@@ -48,11 +55,30 @@ export class PracticesService {
     }
   }
 
-  async findAll() {
+  async findAll(user: User) {
     try {
+      const where: any = {};
+
+      // Role-based filtering
+      if (user.role === 'CONCIERGE') {
+        // CONCIERGE users only see practices they created
+        where.createdBy = user.id;
+      }
+      // ADMIN and OPS_FINANCE can see all practices (no additional filter)
+
       return await this.prisma.practice.findMany({
+        where,
         orderBy: {
           createdAt: 'desc',
+        },
+        include: {
+          createdByUser: {
+            select: {
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
         },
       });
     } catch (error) {
@@ -60,19 +86,38 @@ export class PracticesService {
     }
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, user: User) {
     try {
       const practice = await this.prisma.practice.findUnique({
         where: { id },
+        include: {
+          createdByUser: {
+            select: {
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
+        },
       });
 
       if (!practice) {
         throw new NotFoundException('Practice not found');
       }
 
+      // Role-based access control
+      if (user.role === 'CONCIERGE' && practice.createdBy !== user.id) {
+        throw new ForbiddenException(
+          'You can only access practices you created',
+        );
+      }
+
       return practice;
     } catch (error) {
-      if (error instanceof NotFoundException) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException
+      ) {
         throw error;
       }
       throw new BadRequestException('Failed to fetch practice');
@@ -80,11 +125,30 @@ export class PracticesService {
   }
 
   async update(id: string, updatePracticeDto: UpdatePracticeDto, user: User) {
-    this.checkAdminRole(user);
-
     try {
       // Check if practice exists
-      await this.findOne(id);
+      const existingPractice = await this.prisma.practice.findUnique({
+        where: { id },
+      });
+
+      if (!existingPractice) {
+        throw new NotFoundException('Practice not found');
+      }
+
+      // Role-based update permissions
+      if (user.role === 'CONCIERGE') {
+        // CONCIERGE can only update practices they created
+        if (existingPractice.createdBy !== user.id) {
+          throw new ForbiddenException(
+            'You can only update practices you created',
+          );
+        }
+      } else if (user.role !== 'ADMIN') {
+        // Only ADMIN and CONCIERGE can update practices
+        throw new ForbiddenException(
+          'Only admin and concierge users can update practices',
+        );
+      }
 
       const practice = await this.prisma.practice.update({
         where: { id },
@@ -100,11 +164,23 @@ export class PracticesService {
             feeModel: updatePracticeDto.feeModel,
           }),
         },
+        include: {
+          createdByUser: {
+            select: {
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
+          },
+        },
       });
 
       return practice;
     } catch (error) {
-      if (error instanceof NotFoundException) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException
+      ) {
         throw error;
       }
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -119,11 +195,30 @@ export class PracticesService {
   }
 
   async remove(id: string, user: User) {
-    this.checkAdminRole(user);
-
     try {
       // Check if practice exists
-      await this.findOne(id);
+      const existingPractice = await this.prisma.practice.findUnique({
+        where: { id },
+      });
+
+      if (!existingPractice) {
+        throw new NotFoundException('Practice not found');
+      }
+
+      // Role-based delete permissions
+      if (user.role === 'CONCIERGE') {
+        // CONCIERGE can only delete practices they created
+        if (existingPractice.createdBy !== user.id) {
+          throw new ForbiddenException(
+            'You can only delete practices you created',
+          );
+        }
+      } else if (user.role !== 'ADMIN') {
+        // Only ADMIN and CONCIERGE can delete practices
+        throw new ForbiddenException(
+          'Only admin and concierge users can delete practices',
+        );
+      }
 
       await this.prisma.practice.delete({
         where: { id },
@@ -131,7 +226,10 @@ export class PracticesService {
 
       return { success: true };
     } catch (error) {
-      if (error instanceof NotFoundException) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException
+      ) {
         throw error;
       }
       throw new BadRequestException('Failed to delete practice');

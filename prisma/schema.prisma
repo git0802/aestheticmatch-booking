@@ -26,6 +26,7 @@ model User {
   updatedPatients Patient[] @relation("PatientUpdatedBy")
   createdProcedures Procedure[] @relation("ProcedureCreatedBy")
   updatedProcedures Procedure[] @relation("ProcedureUpdatedBy")
+  createdPractices Practice[] @relation("PracticeCreatedBy")
 
   @@map("users")
 }
@@ -169,6 +170,10 @@ model Practice {
   connectorConfig  String?  @map("connector_config") @db.Text
   feeModel         String?  @map("fee_model") @db.Text
   createdAt        DateTime @default(now()) @map("created_at")
+  createdBy        String   @map("created_by")
+
+  // Relations
+  createdByUser    User     @relation("PracticeCreatedBy", fields: [createdBy], references: [id])
 
   @@map("practices")
 }

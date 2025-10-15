@@ -8,6 +8,7 @@ import { UsersModule } from './users/users.module';
 import { PatientsModule } from './patients/patients.module';
 import { ProceduresModule } from './procedures/procedures.module';
 import { PracticesModule } from './practices/practices.module';
+import { MindbodyModule } from './mindbody/mindbody.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { PracticesModule } from './practices/practices.module';
     PatientsModule,
     ProceduresModule,
     PracticesModule,
+    MindbodyModule,
   ],
   controllers: [AppController],
   providers: [AppService],

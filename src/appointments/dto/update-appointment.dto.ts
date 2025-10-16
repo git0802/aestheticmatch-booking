@@ -1,0 +1,38 @@
+import {
+  IsString,
+  IsEnum,
+  IsDateString,
+  IsOptional,
+  IsBoolean,
+} from 'class-validator';
+import { AppointmentType, AppointmentStatus } from '@prisma/client';
+
+export class UpdateAppointmentDto {
+  @IsOptional()
+  @IsString()
+  patientId?: string;
+
+  @IsOptional()
+  @IsString()
+  practiceId?: string;
+
+  @IsOptional()
+  @IsEnum(AppointmentType)
+  appointmentType?: AppointmentType;
+
+  @IsOptional()
+  @IsEnum(AppointmentStatus)
+  status?: AppointmentStatus;
+
+  @IsOptional()
+  @IsDateString()
+  date?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isReturnVisit?: boolean;
+
+  @IsOptional()
+  @IsString()
+  emrAppointmentId?: string;
+}

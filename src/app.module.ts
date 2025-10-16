@@ -8,6 +8,7 @@ import { UsersModule } from './users/users.module';
 import { PatientsModule } from './patients/patients.module';
 import { ProceduresModule } from './procedures/procedures.module';
 import { PracticesModule } from './practices/practices.module';
+import { AppointmentsModule } from './appointments/appointments.module';
 import { MindbodyModule } from './mindbody/mindbody.module';
 
 @Module({
@@ -21,6 +22,7 @@ import { MindbodyModule } from './mindbody/mindbody.module';
     PatientsModule,
     ProceduresModule,
     PracticesModule,
+    AppointmentsModule,
     MindbodyModule,
   ],
   controllers: [AppController],

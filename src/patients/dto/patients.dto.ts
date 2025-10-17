@@ -200,6 +200,26 @@ export class CreatePatientDto {
   @IsString()
   notes?: string;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  addressLine1?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  city?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  state?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  postalCode?: string;
+
   @IsUUID(4)
   amReferralId: string;
 
@@ -265,6 +285,26 @@ export class UpdatePatientDto {
   notes?: string;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  addressLine1?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  city?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  state?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  postalCode?: string;
+
+  @IsOptional()
   @IsUUID(4)
   amReferralId?: string;
 
@@ -308,6 +348,10 @@ export class PatientResponseDto {
   email: string;
   phone?: string;
   notes?: string;
+  addressLine1?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
   amReferralId: string;
   consentFormsSigned?: boolean;
   privacyNoticeAcknowledged?: boolean;

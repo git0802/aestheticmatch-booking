@@ -5,6 +5,10 @@ export interface Patient {
   email: string;
   phone?: string;
   notes?: string;
+  addressLine1?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
   amReferralId: string;
   consentFormsSigned?: boolean;
   privacyNoticeAcknowledged?: boolean;
@@ -20,6 +24,10 @@ export interface CreatePatientRequest {
   email: string;
   phone?: string;
   notes?: string;
+  addressLine1?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
   amReferralId: string;
 }
 
@@ -29,5 +37,9 @@ export interface UpdatePatientRequest {
   email?: string;
   phone?: string;
   notes?: string;
+  addressLine1?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
   amReferralId?: string;
 }

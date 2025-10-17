@@ -26,6 +26,7 @@
     "@nestjs/jwt": "^11.0.0",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/schedule": "^6.0.1",
     "@prisma/client": "^6.16.3",
     "@workos-inc/node": "^7.70.0",
     "class-transformer": "^0.5.1",

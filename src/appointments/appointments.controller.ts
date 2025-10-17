@@ -8,6 +8,7 @@ import {
   Delete,
   Query,
   UseGuards,
+  ForbiddenException,
 } from '@nestjs/common';
 import { AppointmentsService } from './appointments.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
@@ -65,5 +66,15 @@ export class AppointmentsController {
   @Delete(':id')
   remove(@Param('id') id: string, @GetUser() user: User) {
     return this.appointmentsService.remove(id, user);
+  }
+
+  @Post('update-expired')
+  @UseGuards(JwtAuthGuard)
+  async updateExpiredAppointments(@GetUser() user: User) {
+    // Only allow admin to trigger this manually
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenException('Access denied');
+    }
+    return this.appointmentsService.updateExpiredAppointments();
   }
 }

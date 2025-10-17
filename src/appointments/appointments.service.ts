@@ -2,16 +2,20 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { QueryAppointmentsDto } from './dto/query-appointments.dto';
 import { Appointment, Prisma } from '@prisma/client';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import type { User } from '../auth/interfaces/auth.interface';
 
 @Injectable()
 export class AppointmentsService {
+  private readonly logger = new Logger(AppointmentsService.name);
+  
   constructor(private prisma: PrismaService) {}
 
   async create(
@@ -381,5 +385,79 @@ export class AppointmentsService {
     });
 
     return { message: 'Appointment deleted successfully' };
+  }
+
+  async updateExpiredAppointments(): Promise<{ updated: number; appointments: any[] }> {
+    const now = new Date();
+    
+    // Find expired appointments that are still marked as 'booked'
+    const expiredAppointments = await this.prisma.appointment.findMany({
+      where: {
+        status: 'booked',
+        date: {
+          lt: now, // Less than current time
+        },
+      },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        practice: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (expiredAppointments.length === 0) {
+      return { updated: 0, appointments: [] };
+    }
+
+    // Update all expired appointments to 'canceled'
+    const result = await this.prisma.appointment.updateMany({
+      where: {
+        status: 'booked',
+        date: {
+          lt: now,
+        },
+      },
+      data: {
+        status: 'canceled',
+      },
+    });
+
+    this.logger.log(`Updated ${result.count} expired appointments to canceled status`);
+
+    return { 
+      updated: result.count, 
+      appointments: expiredAppointments.map(apt => ({
+        id: apt.id,
+        patientName: apt.patient?.name,
+        practiceName: apt.practice?.name,
+        date: apt.date,
+        appointmentType: apt.appointmentType,
+      }))
+    };
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT) // Runs daily at midnight
+  async handleExpiredAppointments() {
+    try {
+      const result = await this.updateExpiredAppointments();
+      if (result.updated > 0) {
+        this.logger.log(`Cron job: Updated ${result.updated} expired appointments to canceled status`);
+        this.logger.debug(`Expired appointments: ${JSON.stringify(result.appointments)}`);
+      } else {
+        this.logger.log('Cron job: No expired appointments found');
+      }
+    } catch (error) {
+      this.logger.error('Cron job: Error updating expired appointments:', error);
+    }
   }
 }

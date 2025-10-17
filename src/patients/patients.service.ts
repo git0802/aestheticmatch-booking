@@ -37,6 +37,10 @@ export class PatientsService {
         email: createPatientDto.email,
         phone: createPatientDto.phone,
         notes: createPatientDto.notes,
+        addressLine1: createPatientDto.addressLine1,
+        city: createPatientDto.city,
+        state: createPatientDto.state,
+        postalCode: createPatientDto.postalCode,
         amReferralId: createPatientDto.amReferralId,
         consentFormsSigned: createPatientDto.consentFormsSigned,
         privacyNoticeAcknowledged: createPatientDto.privacyNoticeAcknowledged,
@@ -73,7 +77,10 @@ export class PatientsService {
       }
 
       // Add medications if provided
-      if (createPatientDto.medications && createPatientDto.medications.length > 0) {
+      if (
+        createPatientDto.medications &&
+        createPatientDto.medications.length > 0
+      ) {
         createData.medications = {
           create: createPatientDto.medications.map((medication) => ({
             medicationName: medication.medicationName,
@@ -85,7 +92,10 @@ export class PatientsService {
       }
 
       // Add health flags if provided
-      if (createPatientDto.healthFlags && createPatientDto.healthFlags.length > 0) {
+      if (
+        createPatientDto.healthFlags &&
+        createPatientDto.healthFlags.length > 0
+      ) {
         createData.healthFlags = {
           create: createPatientDto.healthFlags.map((healthFlag) => ({
             flagKey: healthFlag.flagKey,
@@ -224,6 +234,18 @@ export class PatientsService {
         ...(updatePatientDto.notes !== undefined && {
           notes: updatePatientDto.notes,
         }),
+        ...(updatePatientDto.addressLine1 !== undefined && {
+          addressLine1: updatePatientDto.addressLine1,
+        }),
+        ...(updatePatientDto.city !== undefined && {
+          city: updatePatientDto.city,
+        }),
+        ...(updatePatientDto.state !== undefined && {
+          state: updatePatientDto.state,
+        }),
+        ...(updatePatientDto.postalCode !== undefined && {
+          postalCode: updatePatientDto.postalCode,
+        }),
         ...(updatePatientDto.amReferralId !== undefined && {
           amReferralId: updatePatientDto.amReferralId,
         }),
@@ -346,6 +368,10 @@ export class PatientsService {
       email: patient.email,
       phone: patient.phone,
       notes: patient.notes,
+      addressLine1: patient.addressLine1,
+      city: patient.city,
+      state: patient.state,
+      postalCode: patient.postalCode,
       amReferralId: patient.amReferralId,
       consentFormsSigned: patient.consentFormsSigned,
       privacyNoticeAcknowledged: patient.privacyNoticeAcknowledged,

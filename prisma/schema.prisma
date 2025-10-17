@@ -50,6 +50,10 @@ model Patient {
   email                     String    @unique @db.VarChar(255)
   phone                     String?   @db.VarChar(25)
   notes                     String?   @db.Text
+  addressLine1              String?   @map("address_line1") @db.VarChar(255)
+  city                      String?   @db.VarChar(100)
+  state                     String?   @db.VarChar(50)
+  postalCode                String?   @map("postal_code") @db.VarChar(20)
   amReferralId              String    @unique @map("am_referral_id") @db.Uuid
   consentFormsSigned        Boolean?  @default(false) @map("consent_forms_signed")
   privacyNoticeAcknowledged Boolean?  @default(false) @map("privacy_notice_acknowledged")

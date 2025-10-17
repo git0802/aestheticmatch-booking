@@ -6,6 +6,7 @@ import {
   IsEnum,
   IsNumberString,
   IsBoolean,
+  IsDateString,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { UserRole } from '@prisma/client';

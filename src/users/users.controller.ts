@@ -46,7 +46,13 @@ export class UsersController {
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(JwtAuthGuard)
   async createUser(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.createUser(createUserDto);
+    const createUserData = {
+      ...createUserDto,
+      birthDate: createUserDto.birthDate
+        ? new Date(createUserDto.birthDate)
+        : undefined,
+    };
+    return this.usersService.createUser(createUserData);
   }
 
   @Post('invite')
@@ -83,7 +89,13 @@ export class UsersController {
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
   ) {
-    return this.usersService.updateUser(id, updateUserDto);
+    const updateUserData = {
+      ...updateUserDto,
+      birthDate: updateUserDto.birthDate
+        ? new Date(updateUserDto.birthDate)
+        : undefined,
+    };
+    return this.usersService.updateUser(id, updateUserData);
   }
 
   @Put(':id/role')

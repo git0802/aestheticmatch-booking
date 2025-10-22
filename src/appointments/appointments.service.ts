@@ -15,7 +15,7 @@ import type { User } from '../auth/interfaces/auth.interface';
 @Injectable()
 export class AppointmentsService {
   private readonly logger = new Logger(AppointmentsService.name);
-  
+
   constructor(private prisma: PrismaService) {}
 
   async create(
@@ -387,9 +387,12 @@ export class AppointmentsService {
     return { message: 'Appointment deleted successfully' };
   }
 
-  async updateExpiredAppointments(): Promise<{ updated: number; appointments: any[] }> {
+  async updateExpiredAppointments(): Promise<{
+    updated: number;
+    appointments: any[];
+  }> {
     const now = new Date();
-    
+
     // Find expired appointments that are still marked as 'booked'
     const expiredAppointments = await this.prisma.appointment.findMany({
       where: {
@@ -419,7 +422,7 @@ export class AppointmentsService {
       return { updated: 0, appointments: [] };
     }
 
-    // Update all expired appointments to 'canceled'
+    // Update all expired appointments to 'expired'
     const result = await this.prisma.appointment.updateMany({
       where: {
         status: 'booked',
@@ -428,21 +431,23 @@ export class AppointmentsService {
         },
       },
       data: {
-        status: 'canceled',
+        status: 'expired',
       },
     });
 
-    this.logger.log(`Updated ${result.count} expired appointments to canceled status`);
+    this.logger.log(
+      `Updated ${result.count} expired appointments to expired status`,
+    );
 
-    return { 
-      updated: result.count, 
-      appointments: expiredAppointments.map(apt => ({
+    return {
+      updated: result.count,
+      appointments: expiredAppointments.map((apt) => ({
         id: apt.id,
         patientName: apt.patient?.name,
         practiceName: apt.practice?.name,
         date: apt.date,
         appointmentType: apt.appointmentType,
-      }))
+      })),
     };
   }
 
@@ -451,13 +456,20 @@ export class AppointmentsService {
     try {
       const result = await this.updateExpiredAppointments();
       if (result.updated > 0) {
-        this.logger.log(`Cron job: Updated ${result.updated} expired appointments to canceled status`);
-        this.logger.debug(`Expired appointments: ${JSON.stringify(result.appointments)}`);
+        this.logger.log(
+          `Cron job: Updated ${result.updated} expired appointments to canceled status`,
+        );
+        this.logger.debug(
+          `Expired appointments: ${JSON.stringify(result.appointments)}`,
+        );
       } else {
         this.logger.log('Cron job: No expired appointments found');
       }
     } catch (error) {
-      this.logger.error('Cron job: Error updating expired appointments:', error);
+      this.logger.error(
+        'Cron job: Error updating expired appointments:',
+        error,
+      );
     }
   }
 }

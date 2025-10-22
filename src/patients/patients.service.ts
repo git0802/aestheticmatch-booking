@@ -152,6 +152,14 @@ export class PatientsService {
         allergies: true,
         medications: true,
         healthFlags: true,
+        createdByUser: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
       } as any,
     });
 
@@ -166,6 +174,14 @@ export class PatientsService {
         allergies: true,
         medications: true,
         healthFlags: true,
+        createdByUser: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
       } as any,
     });
 
@@ -184,6 +200,14 @@ export class PatientsService {
         allergies: true,
         medications: true,
         healthFlags: true,
+        createdByUser: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
       } as any,
     });
 
@@ -202,6 +226,14 @@ export class PatientsService {
         allergies: true,
         medications: true,
         healthFlags: true,
+        createdByUser: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
       } as any,
     });
 
@@ -379,6 +411,14 @@ export class PatientsService {
       updatedBy: patient.updatedBy,
       createdAt: patient.createdAt,
       updatedAt: patient.updatedAt,
+      creator: patient.createdByUser
+        ? {
+            id: patient.createdByUser.id,
+            email: patient.createdByUser.email,
+            firstName: patient.createdByUser.firstName,
+            lastName: patient.createdByUser.lastName,
+          }
+        : undefined,
       pastSurgeries:
         patient.pastSurgeries?.map((surgery: any) => ({
           id: surgery.id,

@@ -341,6 +341,13 @@ export class UpdatePatientDto {
   healthFlags?: CreateHealthFlagDto[];
 }
 
+export class CreatorUserDto {
+  id: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+}
+
 export class PatientResponseDto {
   id: string;
   name: string;
@@ -359,6 +366,7 @@ export class PatientResponseDto {
   updatedBy: string;
   createdAt: Date;
   updatedAt: Date;
+  creator?: CreatorUserDto;
   pastSurgeries?: PastSurgeryResponseDto[];
   allergies?: AllergyResponseDto[];
   medications?: MedicationResponseDto[];

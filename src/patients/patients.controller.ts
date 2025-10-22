@@ -40,6 +40,7 @@ export class PatientsController {
     @Query('skip', new ParseIntPipe({ optional: true })) skip?: number,
     @Query('take', new ParseIntPipe({ optional: true })) take?: number,
     @Query('search') search?: string,
+    @Query('createdBy') createdBy?: string,
   ): Promise<{
     patients: PatientResponseDto[];
     total: number;
@@ -62,10 +63,15 @@ export class PatientsController {
         ? { createdBy: user.id } // CONCIERGE users only see patients they created
         : {}; // Other roles see all patients
 
-    // Combine search and role filtering
+    // Apply createdBy filter if provided (only for non-CONCIERGE users)
+    const createdByClause =
+      user.role !== 'CONCIERGE' && createdBy ? { createdBy } : {};
+
+    // Combine search, role, and createdBy filtering
     const whereClause = {
       ...searchClause,
       ...roleClause,
+      ...createdByClause,
     };
 
     const [patients, total] = await Promise.all([

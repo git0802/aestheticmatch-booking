@@ -14,7 +14,8 @@ export class MindbodyService {
   async checkCredentials(
     credentials: CheckCredentialsDto,
   ): Promise<MindBodyCredentialResponse> {
-    const { apiKey, username, password } = credentials;
+    const { apiKey, username, password, siteId } = credentials;
+    const siteHeader = String(siteId ?? '-99');
 
     try {
       // First get user token for authentication
@@ -25,7 +26,7 @@ export class MindbodyService {
           headers: {
             'Content-Type': 'application/json',
             'API-Key': apiKey,
-            SiteId: '-99',
+            SiteId: siteHeader,
           },
           body: JSON.stringify({
             Username: username,
@@ -66,7 +67,7 @@ export class MindbodyService {
           headers: {
             'Content-Type': 'application/json',
             'API-Key': apiKey,
-            SiteId: '-99',
+            SiteId: siteHeader,
             Authorization: `Bearer ${tokenData.AccessToken}`,
           },
         },

@@ -27,6 +27,7 @@ model User {
   createdProcedures Procedure[] @relation("ProcedureCreatedBy")
   updatedProcedures Procedure[] @relation("ProcedureUpdatedBy")
   createdPractices Practice[] @relation("PracticeCreatedBy")
+  emrCredentials EmrCredential[]
 
   @@map("users")
 }
@@ -41,6 +42,32 @@ enum UserStatus {
   ACTIVE
   INACTIVE
   PENDING
+}
+
+enum EmrProvider {
+  MINDBODY
+  NEXTECH
+  MODMED
+  PATIENTNOW
+}
+
+model EmrCredential {
+  id                 String      @id @default(uuid()) @db.Uuid
+  provider           EmrProvider
+  ownerId            String      @map("owner_id")
+  label              String?     @db.VarChar(100)
+  encryptedData      String      @map("encrypted_data") @db.Text
+  fingerprint        String      @unique @db.VarChar(128)
+  isValid            Boolean     @default(false) @map("is_valid")
+  lastValidatedAt    DateTime?   @map("last_validated_at")
+  validationError    String?     @map("validation_error") @db.Text
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  owner              User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@map("emr_credentials")
 }
 
 model Patient {

@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional } from 'class-validator';
 
 export class CheckCredentialsDto {
   @IsString()
@@ -12,4 +12,9 @@ export class CheckCredentialsDto {
   @IsString()
   @IsNotEmpty()
   password: string;
+
+  // Optional per-account site context; many non-aggregator keys require a specific SiteId
+  @IsOptional()
+  @IsString()
+  siteId?: string;
 }

@@ -10,17 +10,17 @@ import {
   EmrProviderDto,
 } from './dto/create-emr-credential.dto';
 import { UpdateEmrCredentialDto } from './dto/update-emr-credential.dto';
-import { encryptJson, decryptJson } from '../common/crypto.util';
+import { encryptJson } from '../common/crypto.util';
 import { makeFingerprint } from '../common/fingerprint.util';
 import { MindbodyService } from '../mindbody/mindbody.service';
-// Use local type to avoid dependency on generated Prisma types before migration
+// Local fallback type to avoid relying on generated Prisma enums if client isn't up to date
 type EmrProvider = 'MINDBODY' | 'NEXTECH' | 'MODMED' | 'PATIENTNOW';
 
 @Injectable()
 export class EmrCredentialsService {
   constructor(
-    private prisma: PrismaService,
-    private mindbody: MindbodyService,
+    private readonly prisma: PrismaService,
+    private readonly mindbody: MindbodyService,
   ) {}
 
   private normalizeProvider(p: EmrProviderDto | EmrProvider): EmrProvider {

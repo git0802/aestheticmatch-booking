@@ -1,4 +1,4 @@
-import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { CheckCredentialsDto } from './dto/check-credentials.dto';
 import {
   MindBodyCredentialResponse,

@@ -9,7 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { PracticesService } from './practices.service';
-import { CreatePracticeDto } from './dto/create-practice.dto';
+import { CreatePracticeDto, EmrCredentialDto } from './dto/create-practice.dto';
 import { UpdatePracticeDto } from './dto/update-practice.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { GetUser } from '../auth/decorators/get-user.decorator';
@@ -23,6 +23,11 @@ export class PracticesController {
   @Post()
   create(@Body() createPracticeDto: CreatePracticeDto, @GetUser() user: User) {
     return this.practicesService.create(createPracticeDto, user);
+  }
+
+  @Post('test-emr-credentials')
+  testEmrCredentials(@Body() emrCredential: EmrCredentialDto) {
+    return this.practicesService.testEmrCredentials(emrCredential);
   }
 
   @Get()

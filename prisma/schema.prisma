@@ -27,7 +27,6 @@ model User {
   createdProcedures Procedure[] @relation("ProcedureCreatedBy")
   updatedProcedures Procedure[] @relation("ProcedureUpdatedBy")
   createdPractices Practice[] @relation("PracticeCreatedBy")
-  emrCredentials EmrCredential[]
 
   @@map("users")
 }
@@ -51,10 +50,16 @@ enum EmrProvider {
   PATIENTNOW
 }
 
+enum OwnerType {
+  PRACTICE
+  USER
+}
+
 model EmrCredential {
   id                 String      @id @default(uuid()) @db.Uuid
   provider           EmrProvider
   ownerId            String      @map("owner_id")
+  ownerType          OwnerType   @map("owner_type")
   label              String?     @db.VarChar(100)
   encryptedData      String      @map("encrypted_data") @db.Text
   fingerprint        String      @unique @db.VarChar(128)
@@ -63,9 +68,6 @@ model EmrCredential {
   validationError    String?     @map("validation_error") @db.Text
   createdAt          DateTime    @default(now()) @map("created_at")
   updatedAt          DateTime    @updatedAt @map("updated_at")
-
-  // Relations
-  owner              User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@map("emr_credentials")
 }
@@ -207,10 +209,24 @@ model Practice {
 
   // Relations
   createdByUser    User     @relation("PracticeCreatedBy", fields: [createdBy], references: [id])
-
-  appointments Appointment[]
+  appointments     Appointment[]
+  serviceFees      ServiceFee[]
 
   @@map("practices")
+}
+
+model ServiceFee {
+  id           String   @id @default(uuid()) @db.Uuid
+  practiceId   String   @map("practice_id") @db.Uuid
+  serviceName  String   @map("service_name") @db.VarChar(255)
+  price        Decimal  @db.Decimal(10, 2)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  practice     Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+
+  @@map("service_fees")
 }
 
 enum AppointmentType {

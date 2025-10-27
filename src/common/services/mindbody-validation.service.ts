@@ -16,6 +16,7 @@ export class MindbodyValidationService {
           headers: {
             'Content-Type': 'application/json',
             'Api-Key': apiKey,
+            SiteId: siteId || '-99',
           },
           body: JSON.stringify({
             Username: username,
@@ -50,7 +51,7 @@ export class MindbodyValidationService {
           headers: {
             Authorization: `Bearer ${authData.AccessToken}`,
             'Api-Key': apiKey,
-            SiteId: siteId,
+            ...(siteId && { SiteId: siteId }),
           },
         },
       );

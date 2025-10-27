@@ -37,9 +37,9 @@ export class EmrCredentialDto {
   @IsNotEmpty()
   apiKey: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  siteId: string;
+  siteId?: string;
 
   @IsOptional()
   @IsString()

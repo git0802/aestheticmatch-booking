@@ -21,6 +21,11 @@ export class PracticesService {
   ) {}
 
   async create(createPracticeDto: CreatePracticeDto, user: User) {
+    console.log(
+      'Creating practice with data:',
+      JSON.stringify(createPracticeDto, null, 2),
+    );
+
     // Allow ADMIN and CONCIERGE to create practices
     if (!user.role || !['ADMIN', 'CONCIERGE'].includes(user.role)) {
       throw new ForbiddenException(
@@ -36,7 +41,9 @@ export class PracticesService {
       fingerprint: string;
     } | null = null;
     if (emrCredential) {
+      console.log('Validating EMR credential:', emrCredential);
       const validationResult = await this.validateEmrCredential(emrCredential);
+      console.log('Validation result:', validationResult);
       if (!validationResult.isValid) {
         throw new BadRequestException(
           `EMR credential validation failed: ${validationResult.error || 'Unknown error'}`,
@@ -49,76 +56,102 @@ export class PracticesService {
     }
 
     try {
-      // Use transaction to ensure all data is created atomically
-      const result = await this.prisma.$transaction(async (prisma) => {
-        // Create the practice
-        const practice = await prisma.practice.create({
-          data: {
-            name,
-            emrType: emrCredential?.provider || null,
-            createdBy: user.id,
-          },
-        });
-
-        // Create EMR credential if provided and validated
-        if (validatedEmrCredential && emrCredential) {
-          await (prisma as any).emr_credentials.create({
+      console.log('Starting transaction...');
+      // Keep interactive transaction as short as possible (create rows only)
+      const createdPractice = await this.prisma.$transaction(
+        async (tx) => {
+          console.log('Creating practice...');
+          const practice = await tx.practice.create({
             data: {
-              provider: emrCredential.provider,
-              owner_id: practice.id,
-              owner_type: 'PRACTICE',
-              label:
-                emrCredential.label || `${emrCredential.provider} Credentials`,
-              encrypted_data: validatedEmrCredential.encryptedData,
-              fingerprint: validatedEmrCredential.fingerprint,
-              is_valid: true,
-              last_validated_at: new Date(),
+              name,
+              emrType: emrCredential?.provider || null,
+              createdBy: user.id,
             },
           });
-        }
+          console.log('Practice created:', practice.id);
 
-        // Create service fees if provided
-        if (serviceFees && serviceFees.length > 0) {
-          await (prisma as any).service_fees.createMany({
-            data: serviceFees.map((fee) => ({
-              practice_id: practice.id,
-              service_name: fee.serviceName,
-              price: fee.price,
-            })),
-          });
-        }
-
-        // Return practice with all related data
-        return await prisma.practice.findUnique({
-          where: { id: practice.id },
-          include: {
-            createdByUser: {
-              select: {
-                firstName: true,
-                lastName: true,
-                email: true,
+          if (validatedEmrCredential && emrCredential) {
+            console.log('Creating EMR credential...');
+            await tx.emrCredential.create({
+              data: {
+                provider: emrCredential.provider,
+                ownerId: practice.id,
+                ownerType: 'PRACTICE',
+                label:
+                  emrCredential.label ||
+                  `${emrCredential.provider} Credentials`,
+                encryptedData: validatedEmrCredential.encryptedData,
+                fingerprint: validatedEmrCredential.fingerprint,
+                isValid: true,
+                lastValidatedAt: new Date(),
               },
+            });
+            console.log('EMR credential created');
+          }
+
+          if (serviceFees && serviceFees.length > 0) {
+            console.log('Creating service fees:', serviceFees);
+            await tx.serviceFee.createMany({
+              data: serviceFees.map((fee) => ({
+                practiceId: practice.id,
+                serviceName: fee.serviceName,
+                price: fee.price,
+              })),
+            });
+            console.log('Service fees created');
+          }
+
+          return practice;
+        },
+        {
+          // Increase wait and transaction timeouts to avoid P2028 under pool pressure
+          maxWait: 15000, // ms to wait for a connection from the pool
+          timeout: 20000, // ms before aborting the interactive transaction
+        },
+      );
+
+      // Fetch with related data OUTSIDE the transaction for minimal lock time
+      const result = await this.prisma.practice.findUnique({
+        where: { id: createdPractice.id },
+        include: {
+          createdByUser: {
+            select: {
+              firstName: true,
+              lastName: true,
+              email: true,
             },
           },
-        });
+        },
       });
 
       return result;
     } catch (error) {
+      console.error('Error creating practice:', error);
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
           throw new BadRequestException(
             'Practice with this name already exists',
           );
         }
+        if (error.code === 'P2028') {
+          throw new BadRequestException(
+            'Database is busy. Please retry creating the practice in a moment.',
+          );
+        }
+        throw new BadRequestException(
+          `Database error: ${error.code} - ${error.message}`,
+        );
       }
-      throw new BadRequestException('Failed to create practice');
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException(
+        `Failed to create practice: ${error.message || 'Unknown error'}`,
+      );
     }
   }
 
-  private async validateEmrCredential(
-    emrCredential: any,
-  ): Promise<{
+  private async validateEmrCredential(emrCredential: any): Promise<{
     isValid: boolean;
     error?: string;
     encryptedData?: string;
@@ -178,7 +211,7 @@ export class PracticesService {
       }
       // ADMIN and OPS_FINANCE can see all practices (no additional filter)
 
-      return await this.prisma.practice.findMany({
+      const practices = await this.prisma.practice.findMany({
         where,
         orderBy: {
           createdAt: 'desc',
@@ -191,8 +224,33 @@ export class PracticesService {
               email: true,
             },
           },
+          serviceFees: true,
         },
       });
+
+      // Attach non-secret EMR credential metadata (if any) for each practice
+      const results = await Promise.all(
+        practices.map(async (p) => {
+          try {
+            const cred = await (this.prisma as any).emrCredential.findFirst({
+              where: { ownerId: p.id, ownerType: 'PRACTICE' },
+              orderBy: { createdAt: 'desc' },
+              select: {
+                id: true,
+                provider: true,
+                label: true,
+                isValid: true,
+                lastValidatedAt: true,
+                validationError: true,
+              },
+            });
+            return { ...p, emrCredentialMeta: cred || null } as any;
+          } catch {
+            return { ...p, emrCredentialMeta: null } as any;
+          }
+        }),
+      );
+      return results;
     } catch (error) {
       throw new BadRequestException('Failed to fetch practices');
     }
@@ -210,6 +268,7 @@ export class PracticesService {
               email: true,
             },
           },
+          serviceFees: true,
         },
       });
 
@@ -224,7 +283,50 @@ export class PracticesService {
         );
       }
 
-      return practice;
+      // Attach non-secret EMR credential metadata (if any)
+      try {
+        const cred = await (this.prisma as any).emrCredential.findFirst({
+          where: { ownerId: practice.id, ownerType: 'PRACTICE' },
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            provider: true,
+            label: true,
+            isValid: true,
+            lastValidatedAt: true,
+            validationError: true,
+            encryptedData: true,
+          },
+        });
+        let emrCredentialDecrypted: any = null;
+        if (cred?.encryptedData) {
+          try {
+            const data = this.encryptionService.decryptEmrData(
+              cred.encryptedData,
+            );
+            emrCredentialDecrypted = {
+              provider: cred.provider,
+              label: cred.label ?? null,
+              ...data,
+            };
+          } catch (e) {
+            // Swallow decryption errors, still return meta
+            emrCredentialDecrypted = null;
+          }
+        }
+        const { encryptedData, ...meta } = cred || ({} as any);
+        return {
+          ...(practice as any),
+          emrCredentialMeta: cred ? meta : null,
+          emrCredentialDecrypted,
+        };
+      } catch {
+        return {
+          ...(practice as any),
+          emrCredentialMeta: null,
+          emrCredentialDecrypted: null,
+        };
+      }
     } catch (error) {
       if (
         error instanceof NotFoundException ||

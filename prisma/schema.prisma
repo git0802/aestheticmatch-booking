@@ -58,8 +58,8 @@ enum OwnerType {
 model EmrCredential {
   id                 String      @id @default(uuid()) @db.Uuid
   provider           EmrProvider
-  ownerId            String      @map("owner_id")
-  ownerType          OwnerType   @map("owner_type")
+  ownerId            String      @map("owner_id") @db.Uuid
+  ownerType          OwnerType   @map("owner_type") @default(USER)
   label              String?     @db.VarChar(100)
   encryptedData      String      @map("encrypted_data") @db.Text
   fingerprint        String      @unique @db.VarChar(128)

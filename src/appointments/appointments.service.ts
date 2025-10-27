@@ -11,12 +11,18 @@ import { QueryAppointmentsDto } from './dto/query-appointments.dto';
 import { Appointment, Prisma } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import type { User } from '../auth/interfaces/auth.interface';
+import { EncryptionService } from '../common/services/encryption.service';
+import { MindbodyService } from '../mindbody/mindbody.service';
 
 @Injectable()
 export class AppointmentsService {
   private readonly logger = new Logger(AppointmentsService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private encryption: EncryptionService,
+    private mindbody: MindbodyService,
+  ) {}
 
   async create(
     createAppointmentDto: CreateAppointmentDto,
@@ -33,16 +39,60 @@ export class AppointmentsService {
     // Verify practice exists
     const practice = await this.prisma.practice.findUnique({
       where: { id: createAppointmentDto.practiceId },
+      include: { serviceFees: true },
     });
     if (!practice) {
       throw new NotFoundException('Practice not found');
     }
 
-    return this.prisma.appointment.create({
+    // Resolve service fields if serviceFeeId is provided
+    let serviceName = createAppointmentDto.serviceName ?? null;
+    let serviceType = createAppointmentDto.serviceType ?? null;
+    let servicePrice = createAppointmentDto.servicePrice ?? null;
+    let feeAmount = createAppointmentDto.feeAmount ?? null;
+
+    if (createAppointmentDto.serviceFeeId) {
+      const svc = practice.serviceFees.find(
+        (sf) => sf.id === createAppointmentDto.serviceFeeId,
+      );
+      if (!svc) {
+        throw new NotFoundException('Selected service not found for practice');
+      }
+      serviceName = serviceName ?? (svc as any).serviceName;
+      serviceType = serviceType ?? (svc as any).serviceType;
+      servicePrice = servicePrice ?? Number((svc as any).price);
+    }
+
+    // If feeAmount not provided, derive from global FeeSettings by serviceType
+    if (feeAmount == null && serviceType) {
+      const settings = await this.prisma.feeSettings.findFirst();
+      if (settings) {
+        if (serviceType === 'consult') feeAmount = Number(settings.consultFee);
+        else if (serviceType === 'surgery')
+          feeAmount = Number(settings.surgeryFee);
+        else if (serviceType === 'non_surgical')
+          feeAmount = Number(settings.nonSurgicalFee);
+      } else {
+        feeAmount = 0;
+      }
+    }
+
+    const created = await this.prisma.appointment.create({
       data: {
-        ...createAppointmentDto,
+        patientId: createAppointmentDto.patientId,
+        practiceId: createAppointmentDto.practiceId,
+        appointmentType: createAppointmentDto.appointmentType,
+        status: createAppointmentDto.status,
         date: new Date(createAppointmentDto.date),
-      },
+        isReturnVisit: !!createAppointmentDto.isReturnVisit,
+        emrAppointmentId: createAppointmentDto.emrAppointmentId,
+        serviceFeeId: createAppointmentDto.serviceFeeId ?? null,
+        serviceName: serviceName ?? null,
+        serviceType: (serviceType as any) ?? null,
+        servicePrice:
+          servicePrice != null ? new Prisma.Decimal(servicePrice) : null,
+        feeAmount: feeAmount != null ? new Prisma.Decimal(feeAmount) : null,
+      } as any,
       include: {
         patient: {
           select: {
@@ -60,6 +110,50 @@ export class AppointmentsService {
         },
       },
     });
+
+    // Attempt EMR booking for Mindbody if credentials exist
+    try {
+      const emr = await (this.prisma as any).emrCredential.findFirst({
+        where: {
+          ownerId: practice.id,
+          ownerType: 'PRACTICE',
+          provider: 'MINDBODY',
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (emr?.encryptedData) {
+        const creds = this.encryption.decryptEmrData(emr.encryptedData);
+        // Minimal payload; real booking requires mapping staff/location/session
+        const bookingResult = await this.mindbody.bookAppointment(
+          {
+            apiKey: creds.apiKey,
+            username: creds.username,
+            password: creds.password,
+            siteId: creds.siteId,
+          },
+          {
+            startDateTime: created.date.toISOString(),
+            notes: `AestheticMatch booking for patient ${created.patientId}`,
+          },
+        );
+
+        if (bookingResult.success && bookingResult.appointmentId) {
+          await this.prisma.appointment.update({
+            where: { id: created.id },
+            data: { emrAppointmentId: bookingResult.appointmentId },
+          });
+        } else if (!bookingResult.success) {
+          this.logger.warn(
+            `Mindbody booking skipped/failed for appointment ${created.id}: ${bookingResult.error || 'Unknown error'}`,
+          );
+        }
+      }
+    } catch (err) {
+      this.logger.error('EMR booking error', err as any);
+    }
+
+    return created as any;
   }
 
   async findAll(

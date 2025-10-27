@@ -83,6 +83,17 @@ export class ProceduresService {
     return this.getOrCreateFeeSettings();
   }
 
+  async getFeeByServiceType(
+    serviceType: 'consult' | 'surgery' | 'non_surgical',
+  ) {
+    const settings = await this.getOrCreateFeeSettings();
+    if (serviceType === 'consult')
+      return { serviceType, fee: Number(settings.consultFee) };
+    if (serviceType === 'surgery')
+      return { serviceType, fee: Number(settings.surgeryFee) };
+    return { serviceType, fee: Number(settings.nonSurgicalFee) };
+  }
+
   async updateFeeSettings(dto: UpdateFeeSettingsDto, user: User) {
     this.checkAdminRole(user);
     const settings = await this.getOrCreateFeeSettings();

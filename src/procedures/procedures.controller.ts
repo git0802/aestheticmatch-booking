@@ -50,6 +50,17 @@ export class ProceduresController {
     return this.proceduresService.updateFeeSettings(dto, user);
   }
 
+  // Fee by service type mapping endpoint
+  @Get('fee-by-type')
+  getFeeByServiceType(
+    @Query('serviceType') serviceType: 'consult' | 'surgery' | 'non_surgical',
+  ) {
+    if (!serviceType) {
+      return { serviceType: null, fee: 0 };
+    }
+    return this.proceduresService.getFeeByServiceType(serviceType);
+  }
+
   @Get('practice/:practiceId')
   findByPractice(
     @Param('practiceId') practiceId: string,

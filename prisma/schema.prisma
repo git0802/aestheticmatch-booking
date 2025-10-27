@@ -252,11 +252,18 @@ model Appointment {
   date              DateTime          @db.Timestamp(6)
   isReturnVisit     Boolean           @default(false) @map("is_return_visit")
   emrAppointmentId  String?           @map("emr_appointment_id") @db.VarChar(100)
+  // New service selection fields
+  serviceFeeId      String?           @map("service_fee_id") @db.Uuid
+  serviceName       String?           @map("service_name") @db.VarChar(255)
+  serviceType       ServiceType?      @map("service_type")
+  servicePrice      Decimal?          @map("service_price") @db.Decimal(10, 2)
+  feeAmount         Decimal?          @map("fee_amount") @db.Decimal(10, 2)
   createdAt         DateTime          @default(now()) @map("created_at")
 
   // Relations
   patient           Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
   practice          Practice          @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  serviceFee        ServiceFee?       @relation(fields: [serviceFeeId], references: [id])
 
   @@map("appointments")
 }

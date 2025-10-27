@@ -4,8 +4,13 @@ import {
   IsDateString,
   IsOptional,
   IsBoolean,
+  IsNumber,
 } from 'class-validator';
-import { AppointmentType, AppointmentStatus } from '@prisma/client';
+import {
+  AppointmentType,
+  AppointmentStatus,
+  ServiceType,
+} from '@prisma/client';
 
 export class UpdateAppointmentDto {
   @IsOptional()
@@ -35,4 +40,25 @@ export class UpdateAppointmentDto {
   @IsOptional()
   @IsString()
   emrAppointmentId?: string;
+
+  // Service selection fields
+  @IsOptional()
+  @IsString()
+  serviceFeeId?: string;
+
+  @IsOptional()
+  @IsString()
+  serviceName?: string;
+
+  @IsOptional()
+  @IsEnum(ServiceType)
+  serviceType?: ServiceType;
+
+  @IsOptional()
+  @IsNumber()
+  servicePrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  feeAmount?: number;
 }

@@ -18,6 +18,15 @@ export class ServiceFeeDto {
   @MaxLength(255)
   serviceName: string;
 
+  // Local DTO enum to validate against; values match Prisma enum ServiceType
+  @IsEnum({
+    consult: 'consult',
+    surgery: 'surgery',
+    non_surgical: 'non_surgical',
+  })
+  @IsNotEmpty()
+  serviceType: 'consult' | 'surgery' | 'non_surgical';
+
   @IsNumber()
   @Min(0)
   price: number;

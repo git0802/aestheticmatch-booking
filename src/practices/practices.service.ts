@@ -95,6 +95,7 @@ export class PracticesService {
               data: serviceFees.map((fee) => ({
                 practiceId: practice.id,
                 serviceName: fee.serviceName,
+                serviceType: fee.serviceType as any,
                 price: fee.price,
               })),
             });
@@ -364,32 +365,51 @@ export class PracticesService {
         );
       }
 
-      const practice = await this.prisma.practice.update({
-        where: { id },
-        data: {
-          ...(updatePracticeDto.name && { name: updatePracticeDto.name }),
-          ...(updatePracticeDto.emrType !== undefined && {
-            emrType: updatePracticeDto.emrType,
-          }),
-          ...(updatePracticeDto.connectorConfig !== undefined && {
-            connectorConfig: updatePracticeDto.connectorConfig,
-          }),
-          ...(updatePracticeDto.feeModel !== undefined && {
-            feeModel: updatePracticeDto.feeModel,
-          }),
-        },
-        include: {
-          createdByUser: {
-            select: {
-              firstName: true,
-              lastName: true,
-              email: true,
+      const result = await this.prisma.$transaction(async (tx) => {
+        const practice = await tx.practice.update({
+          where: { id },
+          data: {
+            ...(updatePracticeDto.name && { name: updatePracticeDto.name }),
+            ...(updatePracticeDto.emrType !== undefined && {
+              emrType: updatePracticeDto.emrType,
+            }),
+            ...(updatePracticeDto.connectorConfig !== undefined && {
+              connectorConfig: updatePracticeDto.connectorConfig,
+            }),
+            ...(updatePracticeDto.feeModel !== undefined && {
+              feeModel: updatePracticeDto.feeModel,
+            }),
+          },
+          include: {
+            createdByUser: {
+              select: {
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
             },
           },
-        },
+        });
+
+        if (updatePracticeDto.serviceFees) {
+          // Replace service fees with provided set
+          await tx.serviceFee.deleteMany({ where: { practiceId: id } });
+          if (updatePracticeDto.serviceFees.length > 0) {
+            await tx.serviceFee.createMany({
+              data: updatePracticeDto.serviceFees.map((fee) => ({
+                practiceId: id,
+                serviceName: fee.serviceName,
+                serviceType: (fee as any).serviceType,
+                price: fee.price,
+              })),
+            });
+          }
+        }
+
+        return practice;
       });
 
-      return practice;
+      return result;
     } catch (error) {
       if (
         error instanceof NotFoundException ||

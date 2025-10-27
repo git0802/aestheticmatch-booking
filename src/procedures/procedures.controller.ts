@@ -10,7 +10,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ProceduresService } from './procedures.service';
-import { CreateProcedureDto } from './dto/create-procedure.dto';
+import {
+  CreateProcedureDto,
+  UpdateFeeSettingsDto,
+} from './dto/create-procedure.dto';
 import { UpdateProcedureDto } from './dto/update-procedure.dto';
 import { QueryProceduresDto } from './dto/query-procedures.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -35,9 +38,16 @@ export class ProceduresController {
     return this.proceduresService.findAll(query);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string, @GetUser() user: User) {
-    return this.proceduresService.findOne(id);
+  // Place specific/static routes BEFORE dynamic ":id" to avoid route conflicts
+  // Global fee settings endpoints
+  @Get('fees-settings')
+  getFeesSettings() {
+    return this.proceduresService.getFeeSettings();
+  }
+
+  @Patch('fees-settings')
+  updateFeesSettings(@Body() dto: UpdateFeeSettingsDto, @GetUser() user: User) {
+    return this.proceduresService.updateFeeSettings(dto, user);
   }
 
   @Get('practice/:practiceId')
@@ -46,6 +56,11 @@ export class ProceduresController {
     @GetUser() user: User,
   ) {
     return this.proceduresService.findByPractice(practiceId);
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string, @GetUser() user: User) {
+    return this.proceduresService.findOne(id);
   }
 
   @Patch(':id')

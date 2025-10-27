@@ -5,7 +5,10 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateProcedureDto } from './dto/create-procedure.dto';
+import {
+  CreateProcedureDto,
+  UpdateFeeSettingsDto,
+} from './dto/create-procedure.dto';
 import { UpdateProcedureDto } from './dto/update-procedure.dto';
 import { QueryProceduresDto } from './dto/query-procedures.dto';
 import { Prisma } from '@prisma/client';
@@ -61,6 +64,38 @@ export class ProceduresService {
       }
       throw error;
     }
+  }
+
+  // Global Fee Settings
+  private async getOrCreateFeeSettings() {
+    const existing = await this.prisma.feeSettings.findFirst();
+    if (existing) return existing;
+    return this.prisma.feeSettings.create({
+      data: {
+        consultFee: 0,
+        surgeryFee: 0,
+        nonSurgicalFee: 0,
+      },
+    });
+  }
+
+  async getFeeSettings() {
+    return this.getOrCreateFeeSettings();
+  }
+
+  async updateFeeSettings(dto: UpdateFeeSettingsDto, user: User) {
+    this.checkAdminRole(user);
+    const settings = await this.getOrCreateFeeSettings();
+    return this.prisma.feeSettings.update({
+      where: { id: settings.id },
+      data: {
+        ...(dto.consultFee !== undefined && { consultFee: dto.consultFee }),
+        ...(dto.surgeryFee !== undefined && { surgeryFee: dto.surgeryFee }),
+        ...(dto.nonSurgicalFee !== undefined && {
+          nonSurgicalFee: dto.nonSurgicalFee,
+        }),
+      },
+    });
   }
 
   async findAll(query: QueryProceduresDto) {

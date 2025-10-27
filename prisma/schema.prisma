@@ -259,3 +259,15 @@ model Appointment {
 
   @@map("appointments")
 }
+
+// Global fee settings for consult, surgery, and non-surgical.
+model FeeSettings {
+  id               String   @id @default(uuid()) @db.Uuid
+  consultFee       Decimal  @db.Decimal(10, 2)
+  surgeryFee       Decimal  @db.Decimal(10, 2)
+  nonSurgicalFee   Decimal  @db.Decimal(10, 2)
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("fee_settings")
+}

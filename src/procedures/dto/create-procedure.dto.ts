@@ -21,6 +21,26 @@ export enum FeeRule {
   SURGERY = 'SURGERY',
 }
 
+export class UpdateFeeSettingsDto {
+  @IsNumber()
+  @Type(() => Number)
+  @Min(0)
+  @IsOptional()
+  consultFee?: number;
+
+  @IsNumber()
+  @Type(() => Number)
+  @Min(0)
+  @IsOptional()
+  surgeryFee?: number;
+
+  @IsNumber()
+  @Type(() => Number)
+  @Min(0)
+  @IsOptional()
+  nonSurgicalFee?: number;
+}
+
 export class CreateProcedureDto {
   @IsString()
   @IsNotEmpty()

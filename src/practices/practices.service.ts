@@ -21,11 +21,6 @@ export class PracticesService {
   ) {}
 
   async create(createPracticeDto: CreatePracticeDto, user: User) {
-    console.log(
-      'Creating practice with data:',
-      JSON.stringify(createPracticeDto, null, 2),
-    );
-
     // Allow ADMIN and CONCIERGE to create practices
     if (!user.role || !['ADMIN', 'CONCIERGE'].includes(user.role)) {
       throw new ForbiddenException(
@@ -41,9 +36,7 @@ export class PracticesService {
       fingerprint: string;
     } | null = null;
     if (emrCredential) {
-      console.log('Validating EMR credential:', emrCredential);
       const validationResult = await this.validateEmrCredential(emrCredential);
-      console.log('Validation result:', validationResult);
       if (!validationResult.isValid) {
         throw new BadRequestException(
           `EMR credential validation failed: ${validationResult.error || 'Unknown error'}`,
@@ -90,7 +83,6 @@ export class PracticesService {
           }
 
           if (serviceFees && serviceFees.length > 0) {
-            console.log('Creating service fees:', serviceFees);
             await tx.serviceFee.createMany({
               data: serviceFees.map((fee) => ({
                 practiceId: practice.id,

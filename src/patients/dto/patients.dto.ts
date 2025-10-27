@@ -220,9 +220,6 @@ export class CreatePatientDto {
   @MaxLength(20)
   postalCode?: string;
 
-  @IsUUID(4)
-  amReferralId: string;
-
   @IsBoolean()
   consentFormsSigned: boolean;
 
@@ -305,10 +302,6 @@ export class UpdatePatientDto {
   postalCode?: string;
 
   @IsOptional()
-  @IsUUID(4)
-  amReferralId?: string;
-
-  @IsOptional()
   @IsBoolean()
   consentFormsSigned?: boolean;
 
@@ -359,7 +352,6 @@ export class PatientResponseDto {
   city?: string;
   state?: string;
   postalCode?: string;
-  amReferralId: string;
   consentFormsSigned?: boolean;
   privacyNoticeAcknowledged?: boolean;
   createdBy: string;

@@ -41,7 +41,6 @@ export class PatientsService {
         city: createPatientDto.city,
         state: createPatientDto.state,
         postalCode: createPatientDto.postalCode,
-        amReferralId: createPatientDto.amReferralId,
         consentFormsSigned: createPatientDto.consentFormsSigned,
         privacyNoticeAcknowledged: createPatientDto.privacyNoticeAcknowledged,
         dob: new Date(createPatientDto.dob),
@@ -123,9 +122,7 @@ export class PatientsService {
           if (target?.includes('email')) {
             throw new ConflictException('Email already exists');
           }
-          if (target?.includes('am_referral_id')) {
-            throw new ConflictException('AM Referral ID already exists');
-          }
+          // am_referral_id removed
         }
       }
       throw error;
@@ -218,33 +215,7 @@ export class PatientsService {
     return this.formatPatientResponse(patient);
   }
 
-  async findByAmReferralId(amReferralId: string): Promise<PatientResponseDto> {
-    const patient = await this.prisma.patient.findUnique({
-      where: { amReferralId },
-      include: {
-        pastSurgeries: true,
-        allergies: true,
-        medications: true,
-        healthFlags: true,
-        createdByUser: {
-          select: {
-            id: true,
-            email: true,
-            firstName: true,
-            lastName: true,
-          },
-        },
-      } as any,
-    });
-
-    if (!patient) {
-      throw new NotFoundException(
-        `Patient with AM Referral ID ${amReferralId} not found`,
-      );
-    }
-
-    return this.formatPatientResponse(patient);
-  }
+  // findByAmReferralId removed
 
   async update(
     id: string,
@@ -277,9 +248,6 @@ export class PatientsService {
         }),
         ...(updatePatientDto.postalCode !== undefined && {
           postalCode: updatePatientDto.postalCode,
-        }),
-        ...(updatePatientDto.amReferralId !== undefined && {
-          amReferralId: updatePatientDto.amReferralId,
         }),
         ...(updatePatientDto.consentFormsSigned !== undefined && {
           consentFormsSigned: updatePatientDto.consentFormsSigned,
@@ -364,9 +332,7 @@ export class PatientsService {
           if (target?.includes('email')) {
             throw new ConflictException('Email already exists');
           }
-          if (target?.includes('am_referral_id')) {
-            throw new ConflictException('AM Referral ID already exists');
-          }
+          // am_referral_id removed
         }
       }
       throw error;
@@ -404,7 +370,6 @@ export class PatientsService {
       city: patient.city,
       state: patient.state,
       postalCode: patient.postalCode,
-      amReferralId: patient.amReferralId,
       consentFormsSigned: patient.consentFormsSigned,
       privacyNoticeAcknowledged: patient.privacyNoticeAcknowledged,
       createdBy: patient.createdBy,

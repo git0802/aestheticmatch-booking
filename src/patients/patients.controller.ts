@@ -106,12 +106,7 @@ export class PatientsController {
     return this.patientsService.findByEmail(email);
   }
 
-  @Get('am-referral/:amReferralId')
-  async findByAmReferralId(
-    @Param('amReferralId', ParseUUIDPipe) amReferralId: string,
-  ): Promise<PatientResponseDto> {
-    return this.patientsService.findByAmReferralId(amReferralId);
-  }
+  // Route to find by AM Referral ID removed
 
   @Patch(':id')
   async update(

@@ -9,7 +9,6 @@ export interface Patient {
   city?: string;
   state?: string;
   postalCode?: string;
-  amReferralId: string;
   consentFormsSigned?: boolean;
   privacyNoticeAcknowledged?: boolean;
   createdBy: string;
@@ -28,7 +27,6 @@ export interface CreatePatientRequest {
   city?: string;
   state?: string;
   postalCode?: string;
-  amReferralId: string;
 }
 
 export interface UpdatePatientRequest {
@@ -41,5 +39,4 @@ export interface UpdatePatientRequest {
   city?: string;
   state?: string;
   postalCode?: string;
-  amReferralId?: string;
 }

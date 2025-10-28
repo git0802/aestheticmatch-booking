@@ -225,7 +225,10 @@ model ServiceFee {
 
   // Relations
   practice     Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  appointments Appointment[] @relation("ServiceFeeAppointments")
 
+  // Ensure we can reference (id, practiceId) from appointments to enforce practice consistency
+  @@unique([id, practiceId])
   @@map("service_fees")
 }
 
@@ -269,7 +272,8 @@ model Appointment {
   // Relations
   patient           Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
   practice          Practice          @relation(fields: [practiceId], references: [id], onDelete: Cascade)
-  serviceFee        ServiceFee?       @relation(fields: [serviceFeeId], references: [id])
+  // Enforce that selected service belongs to the same practice via composite relation
+  serviceFee        ServiceFee?       @relation("ServiceFeeAppointments", fields: [serviceFeeId, practiceId], references: [id, practiceId])
 
   @@map("appointments")
 }

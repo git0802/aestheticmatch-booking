@@ -98,8 +98,7 @@ export class AppointmentsService {
     };
 
     if (supportsMode) {
-      createData.mode = ((createAppointmentDto as any).mode ??
-        'in_person') as any;
+      createData.mode = (createAppointmentDto as any).mode ?? 'in_person';
     }
 
     // Conditionally include service-related fields only if supported by client/schema
@@ -180,7 +179,7 @@ export class AppointmentsService {
         }
       }
     } catch (err) {
-      this.logger.error('EMR booking error', err as any);
+      this.logger.error('EMR booking error', err);
     }
 
     return created as any;
@@ -448,6 +447,80 @@ export class AppointmentsService {
       }
     }
 
+    // Resolve service-related fields if serviceFeeId is being updated
+    let resolvedServiceName: string | null | undefined = (
+      updateAppointmentDto as any
+    ).serviceName;
+    let resolvedServiceType: any = (updateAppointmentDto as any).serviceType;
+    let resolvedServicePrice: number | null | undefined = (
+      updateAppointmentDto as any
+    ).servicePrice;
+    let resolvedFeeAmount: number | null | undefined = (
+      updateAppointmentDto as any
+    ).feeAmount;
+
+    const targetPracticeId =
+      updateAppointmentDto.practiceId || existingAppointment.practiceId;
+
+    if (typeof (updateAppointmentDto as any).serviceFeeId !== 'undefined') {
+      const incomingServiceFeeId = (updateAppointmentDto as any).serviceFeeId;
+      if (!incomingServiceFeeId) {
+        // Clearing the service selection
+        (updateAppointmentDto as any).serviceFeeId = null;
+        resolvedServiceName = null;
+        resolvedServiceType = null;
+        resolvedServicePrice = null;
+        resolvedFeeAmount = null;
+      } else {
+        // Validate service belongs to practice and derive missing fields
+        const svc = await (this.prisma as any).serviceFee.findFirst({
+          where: { id: incomingServiceFeeId, practiceId: targetPracticeId },
+        });
+        if (!svc) {
+          throw new NotFoundException(
+            'Selected service not found for practice',
+          );
+        }
+        if (
+          typeof resolvedServiceName === 'undefined' ||
+          resolvedServiceName === null
+        ) {
+          resolvedServiceName = svc.serviceName;
+        }
+        if (
+          typeof resolvedServiceType === 'undefined' ||
+          resolvedServiceType === null
+        ) {
+          resolvedServiceType = svc.serviceType;
+        }
+        if (
+          typeof resolvedServicePrice === 'undefined' ||
+          resolvedServicePrice === null
+        ) {
+          resolvedServicePrice = Number(svc.price);
+        }
+      }
+    }
+
+    // If fee not provided but we have a serviceType, derive from global settings
+    if (
+      (typeof resolvedFeeAmount === 'undefined' ||
+        resolvedFeeAmount === null) &&
+      resolvedServiceType
+    ) {
+      const settings = await (this.prisma as any).feeSettings.findFirst();
+      if (settings) {
+        if (resolvedServiceType === 'consult')
+          resolvedFeeAmount = Number(settings.consultFee);
+        else if (resolvedServiceType === 'surgery')
+          resolvedFeeAmount = Number(settings.surgeryFee);
+        else if (resolvedServiceType === 'non_surgical')
+          resolvedFeeAmount = Number(settings.nonSurgicalFee);
+      } else {
+        resolvedFeeAmount = 0;
+      }
+    }
+
     // Build update data and include fields only if supported
     const supportsModeUpdate = this.hasAppointmentField('mode');
     const updateData: Prisma.AppointmentUpdateInput = {} as any;
@@ -472,7 +545,7 @@ export class AppointmentsService {
       supportsModeUpdate &&
       typeof (updateAppointmentDto as any).mode !== 'undefined'
     ) {
-      (updateData as any).mode = (updateAppointmentDto as any).mode as any;
+      (updateData as any).mode = (updateAppointmentDto as any).mode;
     }
 
     // Service fields conditionally
@@ -485,33 +558,32 @@ export class AppointmentsService {
     }
     if (
       this.hasAppointmentField('serviceName') &&
-      typeof updateAppointmentDto.serviceName !== 'undefined'
+      typeof resolvedServiceName !== 'undefined'
     ) {
-      (updateData as any).serviceName =
-        updateAppointmentDto.serviceName ?? null;
+      (updateData as any).serviceName = resolvedServiceName;
     }
     if (
       this.hasAppointmentField('serviceType') &&
-      typeof updateAppointmentDto.serviceType !== 'undefined'
+      typeof resolvedServiceType !== 'undefined'
     ) {
-      (updateData as any).serviceType = updateAppointmentDto.serviceType as any;
+      (updateData as any).serviceType = resolvedServiceType;
     }
     if (
       this.hasAppointmentField('servicePrice') &&
-      typeof updateAppointmentDto.servicePrice !== 'undefined'
+      typeof resolvedServicePrice !== 'undefined'
     ) {
       (updateData as any).servicePrice =
-        updateAppointmentDto.servicePrice != null
-          ? new Prisma.Decimal(updateAppointmentDto.servicePrice)
+        resolvedServicePrice != null
+          ? new Prisma.Decimal(resolvedServicePrice)
           : null;
     }
     if (
       this.hasAppointmentField('feeAmount') &&
-      typeof updateAppointmentDto.feeAmount !== 'undefined'
+      typeof resolvedFeeAmount !== 'undefined'
     ) {
       (updateData as any).feeAmount =
-        updateAppointmentDto.feeAmount != null
-          ? new Prisma.Decimal(updateAppointmentDto.feeAmount)
+        resolvedFeeAmount != null
+          ? new Prisma.Decimal(resolvedFeeAmount)
           : null;
     }
     if (updateAppointmentDto.date) {

@@ -243,12 +243,18 @@ enum AppointmentStatus {
   expired
 }
 
+enum AppointmentMode {
+  virtual
+  in_person
+}
+
 model Appointment {
   id                String            @id @default(uuid()) @db.Uuid
   patientId         String            @map("patient_id") @db.Uuid
   practiceId        String            @map("practice_id") @db.Uuid
   appointmentType   AppointmentType   @map("appointment_type")
   status            AppointmentStatus @map("status")
+  mode              AppointmentMode   @map("mode") @default(in_person)
   date              DateTime          @db.Timestamp(6)
   isReturnVisit     Boolean           @default(false) @map("is_return_visit")
   emrAppointmentId  String?           @map("emr_appointment_id") @db.VarChar(100)

@@ -12,6 +12,12 @@ import {
   ServiceType,
 } from '@prisma/client';
 
+// Temporary local enum until Prisma Client is regenerated with AppointmentMode
+export enum AppointmentModeDto {
+  virtual = 'virtual',
+  in_person = 'in_person',
+}
+
 export class UpdateAppointmentDto {
   @IsOptional()
   @IsString()
@@ -28,6 +34,10 @@ export class UpdateAppointmentDto {
   @IsOptional()
   @IsEnum(AppointmentStatus)
   status?: AppointmentStatus;
+
+  @IsOptional()
+  @IsEnum(AppointmentModeDto)
+  mode?: AppointmentModeDto;
 
   @IsOptional()
   @IsDateString()

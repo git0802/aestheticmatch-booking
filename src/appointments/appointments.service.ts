@@ -153,7 +153,39 @@ export class AppointmentsService {
 
       if (emr?.encryptedData) {
         const creds = this.encryption.decryptEmrData(emr.encryptedData);
-        // Minimal payload; real booking requires mapping staff/location/session
+        // Resolve Mindbody mapping from practice.connectorConfig
+        let staffId: number | string | undefined;
+        let locationId: number | string | undefined;
+        let sessionTypeId: number | string | undefined;
+
+        try {
+          const cfgRaw = (practice as any).connectorConfig;
+          if (cfgRaw) {
+            const cfg =
+              typeof cfgRaw === 'string' ? JSON.parse(cfgRaw) : cfgRaw;
+            const mb = cfg?.mindbody ?? cfg;
+            const svcType = (createAppointmentDto as any).serviceType;
+            const svcFeeId = (createAppointmentDto as any).serviceFeeId;
+            staffId = mb?.staffId ?? mb?.default?.staffId;
+            locationId = mb?.locationId ?? mb?.default?.locationId;
+            // Priority: explicit map by serviceFeeId, then by serviceType, then default
+            if (svcFeeId && mb?.serviceFeeMap?.[svcFeeId]?.sessionTypeId) {
+              sessionTypeId = mb.serviceFeeMap[svcFeeId].sessionTypeId;
+            } else if (
+              svcType &&
+              mb?.serviceTypeMap?.[svcType]?.sessionTypeId
+            ) {
+              sessionTypeId = mb.serviceTypeMap[svcType].sessionTypeId;
+            } else {
+              sessionTypeId = mb?.sessionTypeId ?? mb?.default?.sessionTypeId;
+            }
+          }
+        } catch (e) {
+          this.logger.warn(
+            'Failed to parse practice.connectorConfig for Mindbody mapping',
+          );
+        }
+
         const bookingResult = await this.mindbody.bookAppointment(
           {
             apiKey: creds.apiKey,
@@ -164,6 +196,14 @@ export class AppointmentsService {
           {
             startDateTime: created.date.toISOString(),
             notes: `AestheticMatch booking for patient ${created.patientId}`,
+            staffId,
+            locationId,
+            sessionTypeId,
+            patient: {
+              name: (created as any)?.patient?.name ?? null,
+              email: (created as any)?.patient?.email ?? null,
+              phone: (created as any)?.patient?.phone ?? null,
+            },
           },
         );
 

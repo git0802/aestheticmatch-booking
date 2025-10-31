@@ -120,10 +120,16 @@ export class MindbodyService {
     payload: {
       startDateTime: string;
       notes?: string;
+      // Required mapping from practice connectorConfig
       staffId?: string | number;
       locationId?: string | number;
       sessionTypeId?: string | number;
       clientId?: string;
+      patient?: {
+        name?: string | null;
+        email?: string | null;
+        phone?: string | null;
+      };
     },
   ): Promise<{ success: boolean; appointmentId?: string; error?: string }> {
     const { apiKey, username, password, siteId } = credentials;
@@ -167,25 +173,169 @@ export class MindbodyService {
         !payload.locationId ||
         !payload.sessionTypeId
       ) {
-        return {
-          success: false,
-          error:
-            'Mindbody booking requires clientId, staffId, locationId, and sessionTypeId mapping. Configure connectorConfig to include these values.',
-        };
+        // Try to resolve clientId if patient info is provided
+        if (!payload.clientId && payload.patient?.email) {
+          const resolvedClientId = await this.resolveOrCreateClient(
+            apiKey,
+            siteHeader,
+            tokenData.AccessToken,
+            payload.patient,
+          );
+          if (resolvedClientId) {
+            payload.clientId = resolvedClientId;
+          }
+        }
+        // After attempt, still validate the rest
+        if (
+          !payload.clientId ||
+          !payload.staffId ||
+          !payload.locationId ||
+          !payload.sessionTypeId
+        ) {
+          return {
+            success: false,
+            error:
+              'Mindbody booking requires clientId, staffId, locationId, and sessionTypeId. Provide these via practice.connectorConfig (and ensure patient has an email to auto-create client).',
+          };
+        }
       }
 
-      // Placeholder: Integrate actual Mindbody booking API here.
-      // For now, return a clear error to avoid partial/incorrect bookings.
-      return {
-        success: false,
-        error:
-          'Mindbody booking endpoint not fully implemented in this environment. Credentials validated successfully; provide mapping to enable booking.',
-      };
+      // Perform booking
+      const bookingRes = await fetch(
+        `${this.MINDBODY_API_BASE_URL}appointments/appointments`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'API-Key': apiKey,
+            SiteId: siteHeader,
+            Authorization: `Bearer ${tokenData.AccessToken}`,
+          },
+          body: JSON.stringify({
+            Appointments: [
+              {
+                StartDateTime: payload.startDateTime,
+                LocationId: Number(payload.locationId),
+                StaffId: Number(payload.staffId),
+                ClientId: String(payload.clientId),
+                SessionTypeId: Number(payload.sessionTypeId),
+                Notes: payload.notes ?? undefined,
+              },
+            ],
+          }),
+        },
+      );
+
+      if (!bookingRes.ok) {
+        const errorData = await bookingRes.json().catch(() => ({}));
+        const msg =
+          errorData?.Error?.Message ||
+          errorData?.Message ||
+          `HTTP ${bookingRes.status}: ${bookingRes.statusText}`;
+        return { success: false, error: `Mindbody booking failed: ${msg}` };
+      }
+
+      const body = await bookingRes.json().catch(() => ({}));
+      // Response typically includes Appointments array
+      const appt = body?.Appointments?.[0] || body?.Appointment;
+      const appointmentId = appt?.Id || appt?.AppointmentId || appt?.ID;
+      if (!appointmentId) {
+        return {
+          success: false,
+          error: 'Mindbody booking succeeded but no appointment ID returned',
+        };
+      }
+      return { success: true, appointmentId: String(appointmentId) };
     } catch (error) {
       this.logger.error('MindBody book appointment error:', error);
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return { success: false, error: errorMessage };
     }
+  }
+
+  private async resolveOrCreateClient(
+    apiKey: string,
+    siteHeader: string,
+    accessToken: string,
+    patient: {
+      name?: string | null;
+      email?: string | null;
+      phone?: string | null;
+    },
+  ): Promise<string | null> {
+    try {
+      // Try search by email
+      if (patient.email) {
+        const searchRes = await fetch(
+          `${this.MINDBODY_API_BASE_URL}client/clients?SearchText=${encodeURIComponent(patient.email)}`,
+          {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'API-Key': apiKey,
+              SiteId: siteHeader,
+              Authorization: `Bearer ${accessToken}`,
+            },
+          },
+        );
+        if (searchRes.ok) {
+          const data = await searchRes.json();
+          const found = data?.Clients?.find(
+            (c: any) => c?.Email === patient.email,
+          );
+          if (found?.Id || found?.ID) return String(found.Id || found.ID);
+        }
+      }
+
+      // Create client if we have minimum info
+      const { firstName, lastName } = this.nameToParts(patient.name || '');
+      const addRes = await fetch(
+        `${this.MINDBODY_API_BASE_URL}client/addclient`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'API-Key': apiKey,
+            SiteId: siteHeader,
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            Client: {
+              FirstName: firstName || 'Client',
+              LastName: lastName || 'Unknown',
+              Email: patient.email || undefined,
+              MobilePhone: patient.phone
+                ? this.normalizePhone(patient.phone)
+                : undefined,
+              SendAccountEmails: false,
+              SendScheduleEmails: false,
+            },
+          }),
+        },
+      );
+      if (!addRes.ok) return null;
+      const body = await addRes.json().catch(() => ({}));
+      const client = body?.Client || body?.Clients?.[0];
+      const clientId = client?.Id || client?.ID;
+      return clientId ? String(clientId) : null;
+    } catch (e) {
+      this.logger.warn('Mindbody client resolve/create failed', e as any);
+      return null;
+    }
+  }
+
+  private nameToParts(full: string): { firstName: string; lastName: string } {
+    const parts = (full || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return { firstName: '', lastName: '' };
+    if (parts.length === 1) return { firstName: parts[0], lastName: '' };
+    return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
+  }
+
+  private normalizePhone(phone?: string | null): string | undefined {
+    if (!phone) return undefined;
+    // Keep digits and leading plus
+    const cleaned = phone.replace(/[^+\d]/g, '');
+    return cleaned || undefined;
   }
 }

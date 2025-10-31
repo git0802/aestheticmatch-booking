@@ -25,6 +25,41 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## Mindbody appointment booking
+
+When an appointment is created via `POST /api/appointments`, the service will attempt to book the same appointment in Mindbody if the selected practice has valid Mindbody EMR credentials and a connector configuration that provides the required mapping.
+
+Requirements:
+
+- Store a valid Mindbody credential for the practice (provider `MINDBODY`) with fields: `apiKey`, `username`, `password`, and optional `siteId`.
+- Configure the practice `connectorConfig` JSON with Mindbody mapping. Example:
+
+```json
+{
+  "mindbody": {
+    "staffId": 123, // default staff
+    "locationId": 456, // default location
+    "sessionTypeId": 789, // default session type
+    "serviceTypeMap": {
+      "consult": { "sessionTypeId": 1001 },
+      "surgery": { "sessionTypeId": 1002 },
+      "non_surgical": { "sessionTypeId": 1003 }
+    },
+    "serviceFeeMap": {
+      "<serviceFeeId-uuid>": { "sessionTypeId": 1010 }
+    }
+  }
+}
+```
+
+Resolution order for `sessionTypeId` is: `serviceFeeMap[serviceFeeId]` -> `serviceTypeMap[serviceType]` -> default `sessionTypeId`.
+
+Patient mapping:
+
+- If `clientId` isn't provided by the config, the system will search by patient email in Mindbody and create a client if not found using patient name/email/phone.
+
+On success, the external Mindbody `appointmentId` is saved to `appointments.emrAppointmentId`.
+
 ## Project setup
 
 ```bash

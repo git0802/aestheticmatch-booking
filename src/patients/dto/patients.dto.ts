@@ -347,6 +347,7 @@ export class PatientResponseDto {
   dob: Date;
   email: string;
   phone?: string;
+  amReferralId?: string;
   notes?: string;
   addressLine1?: string;
   city?: string;

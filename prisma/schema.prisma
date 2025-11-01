@@ -83,6 +83,7 @@ model Patient {
   city                      String?   @db.VarChar(100)
   state                     String?   @db.VarChar(50)
   postalCode                String?   @map("postal_code") @db.VarChar(20)
+  amReferralId              String?   @unique @map("am_referral_id") @db.VarChar(100)
   consentFormsSigned        Boolean?  @default(false) @map("consent_forms_signed")
   privacyNoticeAcknowledged Boolean?  @default(false) @map("privacy_notice_acknowledged")
   createdBy                 String    @map("created_by")

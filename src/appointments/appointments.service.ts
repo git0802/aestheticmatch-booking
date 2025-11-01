@@ -186,6 +186,35 @@ export class AppointmentsService {
           );
         }
 
+        // Check if patient already has a MindBody client ID, create one if not
+        let clientId = patient.amReferralId;
+        if (!clientId) {
+          try {
+            const mindbodyClient = await this.mindbody.addClient({
+              firstName: patient.name.split(' ')[0] || patient.name,
+              lastName: patient.name.split(' ').slice(1).join(' ') || '',
+              email: patient.email,
+              phone: patient.phone || '',
+              dateOfBirth: patient.dob,
+            });
+
+            clientId = mindbodyClient.id;
+
+            // Update patient with the new MindBody client ID
+            await this.prisma.patient.update({
+              where: { id: patient.id },
+              data: { amReferralId: clientId },
+            });
+
+            this.logger.log(
+              `Created MindBody client for patient ${patient.id}: ${clientId}`,
+            );
+          } catch (error) {
+            this.logger.warn('Failed to create MindBody client:', error);
+            // Continue with booking even if client creation fails
+          }
+        }
+
         const bookingResult = await this.mindbody.bookAppointment(
           {
             apiKey: creds.apiKey,
@@ -199,6 +228,7 @@ export class AppointmentsService {
             staffId,
             locationId,
             sessionTypeId,
+            clientId: clientId || undefined,
             patient: {
               name: (created as any)?.patient?.name ?? null,
               email: (created as any)?.patient?.email ?? null,

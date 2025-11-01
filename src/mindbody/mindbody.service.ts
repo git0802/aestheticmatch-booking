@@ -321,8 +321,8 @@ export class MindbodyService {
       return clientId ? String(clientId) : null;
     } catch (e) {
       this.logger.warn('Mindbody client resolve/create failed', e as any);
-      return null;
     }
+    return null;
   }
 
   private nameToParts(full: string): { firstName: string; lastName: string } {
@@ -337,5 +337,27 @@ export class MindbodyService {
     // Keep digits and leading plus
     const cleaned = phone.replace(/[^+\d]/g, '');
     return cleaned || undefined;
+  }
+
+  async addClient(clientData: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    dateOfBirth?: Date;
+  }) {
+    // TODO: Implement MindBody client creation API call
+    // This is a placeholder implementation
+    console.log('Adding client to MindBody:', clientData);
+
+    // Mock response for now - replace with actual MindBody API call
+    return {
+      id: `mb_${Date.now()}`,
+      mindbodyId: `mb_${Date.now()}`,
+      firstName: clientData.firstName,
+      lastName: clientData.lastName,
+      email: clientData.email,
+      phone: clientData.phone,
+    };
   }
 }

@@ -1,10 +1,13 @@
 import { Module } from '@nestjs/common';
 import { MindbodyController } from './mindbody.controller';
 import { MindbodyService } from './mindbody.service';
+import { MindBodyClientService } from './mindbody-client.service';
+import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
+  imports: [PrismaModule],
   controllers: [MindbodyController],
-  providers: [MindbodyService],
-  exports: [MindbodyService],
+  providers: [MindbodyService, MindBodyClientService],
+  exports: [MindbodyService, MindBodyClientService],
 })
 export class MindbodyModule {}

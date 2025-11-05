@@ -4,6 +4,27 @@ import {
   MindBodyCredentialResponse,
   MindBodySiteInfo,
 } from './dto/mindbody-response.dto';
+import {
+  MindBodyClientData,
+  MindBodyClientResponse,
+} from './interfaces/client.interface';
+
+interface MindbodyAuthCredentials {
+  apiKey: string;
+  username: string;
+  password: string;
+  siteId?: string;
+}
+
+class MindbodyApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status?: number,
+    public readonly payload?: any,
+  ) {
+    super(message);
+  }
+}
 
 @Injectable()
 export class MindbodyService {
@@ -11,83 +32,266 @@ export class MindbodyService {
   private readonly MINDBODY_API_BASE_URL =
     'https://api.mindbodyonline.com/public/v6/';
 
+  private normalizeSiteId(siteId?: string | null): string {
+    return String(siteId ?? '-99');
+  }
+
+  private buildHeaders(
+    apiKey: string,
+    siteHeader: string,
+    accessToken?: string,
+  ): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'API-Key': apiKey,
+      SiteId: siteHeader,
+    };
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
+    }
+    return headers;
+  }
+
+  private async safeJson(response: any): Promise<any> {
+    try {
+      return await response.json();
+    } catch (error) {
+      return {};
+    }
+  }
+
+  private async issueUserToken(
+    credentials: MindbodyAuthCredentials,
+  ): Promise<{ accessToken: string; siteHeader: string; token: any }> {
+    const siteHeader = this.normalizeSiteId(credentials.siteId);
+    const tokenResponse = await fetch(
+      `${this.MINDBODY_API_BASE_URL}usertoken/issue`,
+      {
+        method: 'POST',
+        headers: this.buildHeaders(credentials.apiKey, siteHeader),
+        body: JSON.stringify({
+          Username: credentials.username,
+          Password: credentials.password,
+        }),
+      },
+    );
+
+    if (!tokenResponse.ok) {
+      const payload = await this.safeJson(tokenResponse);
+      const message =
+        payload?.Error?.Message ||
+        `Authentication failed: HTTP ${tokenResponse.status}: ${tokenResponse.statusText}`;
+      throw new MindbodyApiError(message, tokenResponse.status, payload);
+    }
+
+    const tokenData = await this.safeJson(tokenResponse);
+    if (!tokenData?.AccessToken) {
+      throw new MindbodyApiError(
+        'Authentication failed: No access token received',
+      );
+    }
+
+    return {
+      accessToken: tokenData.AccessToken,
+      siteHeader,
+      token: tokenData,
+    };
+  }
+
+  private async fetchClientsBySearch(
+    apiKey: string,
+    siteHeader: string,
+    accessToken: string,
+    search: string,
+  ): Promise<any[]> {
+    const response = await fetch(
+      `${this.MINDBODY_API_BASE_URL}client/clients?SearchText=${encodeURIComponent(search)}`,
+      {
+        method: 'GET',
+        headers: this.buildHeaders(apiKey, siteHeader, accessToken),
+      },
+    );
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const payload = await this.safeJson(response);
+    return Array.isArray(payload?.Clients) ? payload.Clients : [];
+  }
+
+  private async findClientByEmail(
+    apiKey: string,
+    siteHeader: string,
+    accessToken: string,
+    email: string,
+  ): Promise<any | null> {
+    const clients = await this.fetchClientsBySearch(
+      apiKey,
+      siteHeader,
+      accessToken,
+      email,
+    );
+    const lower = email.toLowerCase();
+    return (
+      clients.find(
+        (client: any) =>
+          typeof client?.Email === 'string' &&
+          client.Email.toLowerCase() === lower,
+      ) || null
+    );
+  }
+
+  private async findClientByPhone(
+    apiKey: string,
+    siteHeader: string,
+    accessToken: string,
+    phone?: string | null,
+  ): Promise<any | null> {
+    const normalized = this.normalizePhone(phone);
+    if (!normalized) {
+      return null;
+    }
+    const clients = await this.fetchClientsBySearch(
+      apiKey,
+      siteHeader,
+      accessToken,
+      normalized,
+    );
+    return (
+      clients.find((client: any) => {
+        const clientPhone = this.normalizePhone(
+          client?.MobilePhone || client?.HomePhone || client?.WorkPhone,
+        );
+        return clientPhone === normalized;
+      }) || null
+    );
+  }
+
+  private formatBirthDate(date?: Date): string | undefined {
+    if (!date) return undefined;
+    const iso = new Date(date).toISOString();
+    return `${iso.split('T')[0]}T00:00:00`;
+  }
+
+  private buildClientPayload(client: MindBodyClientData): { Client: any } {
+    const payload: Record<string, unknown> = {
+      FirstName: client.firstName || 'Client',
+      LastName: client.lastName || 'Unknown',
+      SendAccountEmails: false,
+      SendAccountTexts: false,
+      SendScheduleEmails: false,
+      SendScheduleTexts: false,
+      SendPromotionalEmails: false,
+      SendPromotionalTexts: false,
+    };
+
+    if (client.email) {
+      payload.Email = client.email;
+    }
+
+    const normalizedPhone = this.normalizePhone(client.phone);
+    if (normalizedPhone) {
+      payload.MobilePhone = normalizedPhone;
+    }
+
+    const birthDate = this.formatBirthDate(client.dateOfBirth);
+    if (birthDate) {
+      payload.BirthDate = birthDate;
+    }
+
+    return { Client: payload };
+  }
+
+  private extractClient(
+    raw: any,
+    fallback?: Partial<MindBodyClientData>,
+  ): MindBodyClientResponse {
+    const id = raw?.Id || raw?.ID || raw?.ClientId || raw?.ClientID;
+    if (!id) {
+      throw new MindbodyApiError(
+        'Mindbody response did not include a client identifier',
+      );
+    }
+
+    return {
+      id: String(id),
+      mindbodyId: String(id),
+      firstName: raw?.FirstName || fallback?.firstName || '',
+      lastName: raw?.LastName || fallback?.lastName || '',
+      email: raw?.Email || fallback?.email || '',
+      phone:
+        raw?.MobilePhone ||
+        raw?.HomePhone ||
+        raw?.WorkPhone ||
+        fallback?.phone ||
+        '',
+    };
+  }
+
+  private async createClientWithToken(
+    apiKey: string,
+    siteHeader: string,
+    accessToken: string,
+    client: MindBodyClientData,
+  ): Promise<MindBodyClientResponse> {
+    const response = await fetch(
+      `${this.MINDBODY_API_BASE_URL}client/addclient`,
+      {
+        method: 'POST',
+        headers: this.buildHeaders(apiKey, siteHeader, accessToken),
+        body: JSON.stringify(this.buildClientPayload(client)),
+      },
+    );
+
+    if (!response.ok) {
+      const payload = await this.safeJson(response);
+      const message =
+        payload?.Error?.Message ||
+        payload?.Message ||
+        `HTTP ${response.status}: ${response.statusText}`;
+      throw new MindbodyApiError(message, response.status, payload);
+    }
+
+    const result = await this.safeJson(response);
+    const rawClient = result?.Client || result?.Clients?.[0];
+    if (!rawClient) {
+      throw new MindbodyApiError(
+        'Mindbody add client succeeded but returned no client data',
+      );
+    }
+
+    return this.extractClient(rawClient, client);
+  }
+
   async checkCredentials(
     credentials: CheckCredentialsDto,
   ): Promise<MindBodyCredentialResponse> {
     const { apiKey, username, password, siteId } = credentials;
-    const siteHeader = String(siteId ?? '-99');
 
     try {
-      // First get user token for authentication
-      const tokenResponse = await fetch(
-        `${this.MINDBODY_API_BASE_URL}usertoken/issue`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'API-Key': apiKey,
-            SiteId: siteHeader,
-          },
-          body: JSON.stringify({
-            Username: username,
-            Password: password,
-          }),
-        },
-      );
+      const { accessToken, siteHeader } = await this.issueUserToken({
+        apiKey,
+        username,
+        password,
+        siteId,
+      });
 
-      if (!tokenResponse.ok) {
-        const errorData = await tokenResponse.json().catch(() => ({}));
-        let errorMessage =
-          errorData.Error?.Message ||
-          `Authentication failed: HTTP ${tokenResponse.status}: ${tokenResponse.statusText}`;
-
-        // Provide helpful context for staff identity errors
-        if (
-          errorMessage.includes('Staff identity authentication failed') ||
-          errorMessage.includes('staff identity')
-        ) {
-          errorMessage = `${errorMessage}. This typically means:\n1. You need to provide a valid Site ID (the numeric ID of your Mindbody business)\n2. The API key is business-specific (not an aggregator key)\n3. The staff username/password don't have API access permissions in Mindbody\n\nPlease check your Mindbody account settings and ensure the Site ID is correct.`;
-        }
-
-        this.logger.error(`MindBody authentication failed: ${errorMessage}`);
-        return {
-          success: false,
-          error: errorMessage,
-        };
-      }
-
-      const tokenData = await tokenResponse.json();
-
-      if (!tokenData.AccessToken) {
-        const errorMessage = 'Authentication failed: No access token received';
-        this.logger.error(errorMessage);
-        return {
-          success: false,
-          error: errorMessage,
-        };
-      }
-
-      // Now get site information with the access token
       const siteResponse = await fetch(
         `${this.MINDBODY_API_BASE_URL}site/sites`,
         {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'API-Key': apiKey,
-            SiteId: siteHeader,
-            Authorization: `Bearer ${tokenData.AccessToken}`,
-          },
+          headers: this.buildHeaders(apiKey, siteHeader, accessToken),
         },
       );
 
       if (!siteResponse.ok) {
-        const errorData = await siteResponse.json().catch(() => ({}));
+        const errorData = await this.safeJson(siteResponse);
         const errorMessage =
           errorData.Error?.Message ||
           `HTTP ${siteResponse.status}: ${siteResponse.statusText}`;
 
-        this.logger.error(`MindBody site info request failed: ${errorMessage}`);
+        this.logger.error(`Mindbody site info request failed: ${errorMessage}`);
         return {
           success: false,
           error: errorMessage,
@@ -96,13 +300,28 @@ export class MindbodyService {
 
       const siteData: MindBodySiteInfo = await siteResponse.json();
 
-      this.logger.log('MindBody credentials validated successfully');
+      this.logger.log('Mindbody credentials validated successfully');
       return {
         success: true,
         sites: siteData,
       };
     } catch (error) {
-      this.logger.error('MindBody credential check error:', error);
+      if (error instanceof MindbodyApiError) {
+        let errorMessage = error.message;
+        if (
+          errorMessage.includes('Staff identity authentication failed') ||
+          errorMessage.includes('staff identity')
+        ) {
+          errorMessage = `${errorMessage}. This typically means:\n1. You need to provide a valid Site ID (the numeric ID of your Mindbody business)\n2. The API key is business-specific (not an aggregator key)\n3. The staff username/password don't have API access permissions in Mindbody\n\nPlease check your Mindbody account settings and ensure the Site ID is correct.`;
+        }
+        this.logger.error(`Mindbody authentication failed: ${errorMessage}`);
+        return {
+          success: false,
+          error: errorMessage,
+        };
+      }
+
+      this.logger.error('Mindbody credential check error:', error);
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
 
@@ -119,12 +338,7 @@ export class MindbodyService {
    * This implementation validates credentials and returns a descriptive error until mapping is provided.
    */
   async bookAppointment(
-    credentials: {
-      apiKey: string;
-      username: string;
-      password: string;
-      siteId?: string;
-    },
+    credentials: MindbodyAuthCredentials,
     payload: {
       startDateTime: string;
       notes?: string;
@@ -140,60 +354,28 @@ export class MindbodyService {
       };
     },
   ): Promise<{ success: boolean; appointmentId?: string; error?: string }> {
-    const { apiKey, username, password, siteId } = credentials;
-    const siteHeader = String(siteId ?? '-99');
-
     try {
-      // Issue user token
-      const tokenResponse = await fetch(
-        `${this.MINDBODY_API_BASE_URL}usertoken/issue`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'API-Key': apiKey,
-            SiteId: siteHeader,
-          },
-          body: JSON.stringify({ Username: username, Password: password }),
-        },
-      );
+      const { accessToken, siteHeader } =
+        await this.issueUserToken(credentials);
 
-      if (!tokenResponse.ok) {
-        const errorData = await tokenResponse.json().catch(() => ({}));
-        const errorMessage =
-          errorData.Error?.Message ||
-          `Authentication failed: HTTP ${tokenResponse.status}: ${tokenResponse.statusText}`;
-        return { success: false, error: errorMessage };
-      }
-
-      const tokenData = await tokenResponse.json();
-      if (!tokenData.AccessToken) {
-        return {
-          success: false,
-          error: 'Authentication failed: No access token received',
-        };
-      }
-
-      // Validate required booking fields
       if (
         !payload.clientId ||
         !payload.staffId ||
         !payload.locationId ||
         !payload.sessionTypeId
       ) {
-        // Try to resolve clientId if patient info is provided
-        if (!payload.clientId && payload.patient?.email) {
+        if (!payload.clientId && payload.patient) {
           const resolvedClientId = await this.resolveOrCreateClient(
-            apiKey,
+            credentials.apiKey,
             siteHeader,
-            tokenData.AccessToken,
+            accessToken,
             payload.patient,
           );
           if (resolvedClientId) {
             payload.clientId = resolvedClientId;
           }
         }
-        // After attempt, still validate the rest
+
         if (
           !payload.clientId ||
           !payload.staffId ||
@@ -203,22 +385,20 @@ export class MindbodyService {
           return {
             success: false,
             error:
-              'Mindbody booking requires clientId, staffId, locationId, and sessionTypeId. These configuration values are no longer available since practice.connectorConfig was removed.',
+              'Mindbody booking requires clientId, staffId, locationId, and sessionTypeId. Provide these values in the request or configure defaults on the practice.',
           };
         }
       }
 
-      // Perform booking
       const bookingRes = await fetch(
         `${this.MINDBODY_API_BASE_URL}appointments/appointments`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'API-Key': apiKey,
-            SiteId: siteHeader,
-            Authorization: `Bearer ${tokenData.AccessToken}`,
-          },
+          headers: this.buildHeaders(
+            credentials.apiKey,
+            siteHeader,
+            accessToken,
+          ),
           body: JSON.stringify({
             Appointments: [
               {
@@ -235,7 +415,7 @@ export class MindbodyService {
       );
 
       if (!bookingRes.ok) {
-        const errorData = await bookingRes.json().catch(() => ({}));
+        const errorData = await this.safeJson(bookingRes);
         const msg =
           errorData?.Error?.Message ||
           errorData?.Message ||
@@ -243,9 +423,8 @@ export class MindbodyService {
         return { success: false, error: `Mindbody booking failed: ${msg}` };
       }
 
-      const body = await bookingRes.json().catch(() => ({}));
-      // Response typically includes Appointments array
-      const appt = body?.Appointments?.[0] || body?.Appointment;
+      const responseBody = await this.safeJson(bookingRes);
+      const appt = responseBody?.Appointments?.[0] || responseBody?.Appointment;
       const appointmentId = appt?.Id || appt?.AppointmentId || appt?.ID;
       if (!appointmentId) {
         return {
@@ -255,7 +434,10 @@ export class MindbodyService {
       }
       return { success: true, appointmentId: String(appointmentId) };
     } catch (error) {
-      this.logger.error('MindBody book appointment error:', error);
+      if (error instanceof MindbodyApiError) {
+        return { success: false, error: error.message };
+      }
+      this.logger.error('Mindbody book appointment error:', error);
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error occurred';
       return { success: false, error: errorMessage };
@@ -273,62 +455,47 @@ export class MindbodyService {
     },
   ): Promise<string | null> {
     try {
-      // Try search by email
       if (patient.email) {
-        const searchRes = await fetch(
-          `${this.MINDBODY_API_BASE_URL}client/clients?SearchText=${encodeURIComponent(patient.email)}`,
-          {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json',
-              'API-Key': apiKey,
-              SiteId: siteHeader,
-              Authorization: `Bearer ${accessToken}`,
-            },
-          },
+        const foundByEmail = await this.findClientByEmail(
+          apiKey,
+          siteHeader,
+          accessToken,
+          patient.email,
         );
-        if (searchRes.ok) {
-          const data = await searchRes.json();
-          const found = data?.Clients?.find(
-            (c: any) => c?.Email === patient.email,
-          );
-          if (found?.Id || found?.ID) return String(found.Id || found.ID);
+        if (foundByEmail?.Id || foundByEmail?.ID) {
+          const clientId = foundByEmail.Id || foundByEmail.ID;
+          return clientId ? String(clientId) : null;
         }
       }
 
-      // Create client if we have minimum info
+      if (patient.phone) {
+        const foundByPhone = await this.findClientByPhone(
+          apiKey,
+          siteHeader,
+          accessToken,
+          patient.phone,
+        );
+        if (foundByPhone?.Id || foundByPhone?.ID) {
+          const clientId = foundByPhone.Id || foundByPhone.ID;
+          return clientId ? String(clientId) : null;
+        }
+      }
+
       const { firstName, lastName } = this.nameToParts(patient.name || '');
-      const addRes = await fetch(
-        `${this.MINDBODY_API_BASE_URL}client/addclient`,
+      const created = await this.createClientWithToken(
+        apiKey,
+        siteHeader,
+        accessToken,
         {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'API-Key': apiKey,
-            SiteId: siteHeader,
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            Client: {
-              FirstName: firstName || 'Client',
-              LastName: lastName || 'Unknown',
-              Email: patient.email || undefined,
-              MobilePhone: patient.phone
-                ? this.normalizePhone(patient.phone)
-                : undefined,
-              SendAccountEmails: false,
-              SendScheduleEmails: false,
-            },
-          }),
+          firstName: firstName || 'Client',
+          lastName: lastName || 'Unknown',
+          email: patient.email || '',
+          phone: patient.phone || '',
         },
       );
-      if (!addRes.ok) return null;
-      const body = await addRes.json().catch(() => ({}));
-      const client = body?.Client || body?.Clients?.[0];
-      const clientId = client?.Id || client?.ID;
-      return clientId ? String(clientId) : null;
+      return created?.id ?? null;
     } catch (e) {
-      this.logger.warn('Mindbody client resolve/create failed', e as any);
+      this.logger.warn('Mindbody client resolve/create failed', e);
     }
     return null;
   }
@@ -347,25 +514,54 @@ export class MindbodyService {
     return cleaned || undefined;
   }
 
-  async addClient(clientData: {
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone: string;
-    dateOfBirth?: Date;
-  }) {
-    // TODO: Implement MindBody client creation API call
-    // This is a placeholder implementation
-    console.log('Adding client to MindBody:', clientData);
+  async addClient(params: {
+    credentials: MindbodyAuthCredentials;
+    client: MindBodyClientData;
+  }): Promise<MindBodyClientResponse> {
+    const { credentials, client } = params;
 
-    // Mock response for now - replace with actual MindBody API call
-    return {
-      id: `mb_${Date.now()}`,
-      mindbodyId: `mb_${Date.now()}`,
-      firstName: clientData.firstName,
-      lastName: clientData.lastName,
-      email: clientData.email,
-      phone: clientData.phone,
-    };
+    try {
+      const { accessToken, siteHeader } =
+        await this.issueUserToken(credentials);
+
+      if (client.email) {
+        const existing = await this.findClientByEmail(
+          credentials.apiKey,
+          siteHeader,
+          accessToken,
+          client.email,
+        );
+        if (existing) {
+          return this.extractClient(existing, client);
+        }
+      }
+
+      if (client.phone) {
+        const existingByPhone = await this.findClientByPhone(
+          credentials.apiKey,
+          siteHeader,
+          accessToken,
+          client.phone,
+        );
+        if (existingByPhone) {
+          return this.extractClient(existingByPhone, client);
+        }
+      }
+
+      return await this.createClientWithToken(
+        credentials.apiKey,
+        siteHeader,
+        accessToken,
+        client,
+      );
+    } catch (error) {
+      this.logger.error('Mindbody add client error:', error);
+      if (error instanceof MindbodyApiError) {
+        throw error;
+      }
+      throw error instanceof Error
+        ? error
+        : new Error('Unknown error occurred while creating Mindbody client');
+    }
   }
 }

@@ -34,24 +34,29 @@ export class MindbodyController {
     success: boolean;
     clientId?: string;
     staffId?: string | number;
+    locationId?: string | number;
+    sessionTypeId?: string | number;
     error?: string;
   }> {
     try {
-      const clientId = await this.mindbodyClientService.ensureClientExists(
-        body.patientId,
-        this.mindbodyService,
-      );
-
-      // Note: practice connectorConfig field has been removed - staffId no longer available
-      const practice = await this.mindbodyClientService.getPracticeStaffId(
+      const context = await this.mindbodyClientService.getPracticeContext(
         body.practiceId,
       );
 
-      if (clientId) {
+      const result = await this.mindbodyClientService.ensureClientExists(
+        body.patientId,
+        body.practiceId,
+        this.mindbodyService,
+        context,
+      );
+
+      if (result.clientId) {
         return {
           success: true,
-          clientId,
-          staffId: practice?.staffId,
+          clientId: result.clientId,
+          staffId: context.staffId,
+          locationId: context.locationId,
+          sessionTypeId: context.sessionTypeId,
         };
       } else {
         return {
@@ -77,6 +82,9 @@ export class MindbodyController {
       practiceId: string;
       startDateTime: string;
       notes?: string;
+      staffId?: string | number;
+      locationId?: string | number;
+      sessionTypeId?: string | number;
     },
   ): Promise<{
     success: boolean;
@@ -85,12 +93,43 @@ export class MindbodyController {
     data?: any;
   }> {
     try {
-      // This would need to get practice credentials and connector config
-      // For now, returning a placeholder response
-      // You'll need to implement fetching practice EMR credentials and calling bookAppointment
+      const context = await this.mindbodyClientService.getPracticeContext(
+        body.practiceId,
+      );
+
+      const ensured = await this.mindbodyClientService.ensureClientExists(
+        body.patientId,
+        body.practiceId,
+        this.mindbodyService,
+        context,
+      );
+
+      if (!ensured.clientId) {
+        return {
+          success: false,
+          error:
+            'Unable to resolve or create a Mindbody client record for the patient',
+        };
+      }
+
+      const bookingResult = await this.mindbodyService.bookAppointment(
+        context.credentials,
+        {
+          startDateTime: body.startDateTime,
+          notes: body.notes,
+          staffId: body.staffId ?? context.staffId,
+          locationId: body.locationId ?? context.locationId,
+          sessionTypeId: body.sessionTypeId ?? context.sessionTypeId,
+          clientId: ensured.clientId,
+          patient: ensured.patient,
+        },
+      );
+
       return {
-        success: false,
-        error: 'Book appointment endpoint not yet fully implemented',
+        success: bookingResult.success,
+        appointmentId: bookingResult.appointmentId,
+        error: bookingResult.error,
+        data: bookingResult.success ? undefined : bookingResult,
       };
     } catch (error) {
       return {

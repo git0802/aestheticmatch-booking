@@ -36,6 +36,7 @@ export class PatientsService {
         name: createPatientDto.name,
         email: createPatientDto.email,
         phone: createPatientDto.phone,
+        gender: createPatientDto.gender,
         notes: createPatientDto.notes,
         addressLine1: createPatientDto.addressLine1,
         city: createPatientDto.city,
@@ -234,6 +235,9 @@ export class PatientsService {
         ...(updatePatientDto.phone !== undefined && {
           phone: updatePatientDto.phone,
         }),
+        ...(updatePatientDto.gender !== undefined && {
+          gender: updatePatientDto.gender,
+        }),
         ...(updatePatientDto.notes !== undefined && {
           notes: updatePatientDto.notes,
         }),
@@ -365,6 +369,7 @@ export class PatientsService {
       dob: patient.dob,
       email: patient.email,
       phone: patient.phone,
+      gender: patient.gender,
       notes: patient.notes,
       addressLine1: patient.addressLine1,
       city: patient.city,

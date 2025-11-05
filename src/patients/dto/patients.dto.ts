@@ -172,6 +172,11 @@ export class HealthFlagResponseDto {
   createdAt: Date;
 }
 
+export enum PatientGender {
+  MALE = 'MALE',
+  FEMALE = 'FEMALE',
+}
+
 export class CreatePatientDto {
   @IsString()
   @IsNotEmpty()
@@ -219,6 +224,11 @@ export class CreatePatientDto {
   @IsString()
   @MaxLength(20)
   postalCode?: string;
+
+  @IsEnum(PatientGender, {
+    message: 'Gender must be either MALE or FEMALE',
+  })
+  gender: PatientGender;
 
   @IsBoolean()
   consentFormsSigned: boolean;
@@ -302,6 +312,12 @@ export class UpdatePatientDto {
   postalCode?: string;
 
   @IsOptional()
+  @IsEnum(PatientGender, {
+    message: 'Gender must be either MALE or FEMALE',
+  })
+  gender?: PatientGender;
+
+  @IsOptional()
   @IsBoolean()
   consentFormsSigned?: boolean;
 
@@ -347,6 +363,7 @@ export class PatientResponseDto {
   dob: Date;
   email: string;
   phone?: string;
+  gender?: PatientGender;
   amReferralId?: string;
   notes?: string;
   addressLine1?: string;

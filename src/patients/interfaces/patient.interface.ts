@@ -4,6 +4,7 @@ export interface Patient {
   dob: Date;
   email: string;
   phone?: string;
+  gender?: string;
   notes?: string;
   addressLine1?: string;
   city?: string;
@@ -22,6 +23,7 @@ export interface CreatePatientRequest {
   dob: string;
   email: string;
   phone?: string;
+  gender?: string;
   notes?: string;
   addressLine1?: string;
   city?: string;
@@ -34,6 +36,7 @@ export interface UpdatePatientRequest {
   dob?: string;
   email?: string;
   phone?: string;
+  gender?: string;
   notes?: string;
   addressLine1?: string;
   city?: string;

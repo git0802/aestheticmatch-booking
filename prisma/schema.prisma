@@ -43,6 +43,11 @@ enum UserStatus {
   PENDING
 }
 
+enum PatientGender {
+  MALE
+  FEMALE
+}
+
 enum EmrProvider {
   MINDBODY
   NEXTECH
@@ -79,6 +84,7 @@ model Patient {
   dob                       DateTime  @map("dob") @db.Date
   email                     String    @unique @db.VarChar(255)
   phone                     String?   @db.VarChar(25)
+  gender                    PatientGender? @map("gender")
   notes                     String?   @db.Text
   addressLine1              String?   @map("address_line1") @db.VarChar(255)
   city                      String?   @db.VarChar(100)

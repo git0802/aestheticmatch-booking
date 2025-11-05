@@ -145,6 +145,27 @@ export class PracticesService {
     }
   }
 
+  private buildCredentialPayload(
+    emrCredential: Record<string, any>,
+  ): Record<string, any> {
+    const payload: Record<string, any> = {
+      apiKey: emrCredential.apiKey,
+      siteId: emrCredential.siteId,
+    };
+
+    if (emrCredential.username) {
+      payload.username = emrCredential.username;
+    }
+    if (emrCredential.password) {
+      payload.password = emrCredential.password;
+    }
+    if (emrCredential.baseUrl) {
+      payload.baseUrl = emrCredential.baseUrl;
+    }
+
+    return payload;
+  }
+
   private async validateEmrCredential(emrCredential: any): Promise<{
     isValid: boolean;
     error?: string;
@@ -155,13 +176,13 @@ export class PracticesService {
       emrCredential;
 
     // Prepare credentials object
-    const credentials = {
+    const credentials = this.buildCredentialPayload({
       apiKey,
       siteId,
-      ...(username && { username }),
-      ...(password && { password }),
-      ...(baseUrl && { baseUrl }),
-    };
+      username,
+      password,
+      baseUrl,
+    });
 
     // Validate credentials based on provider
     let validationResult: { isValid: boolean; error?: string } = {
@@ -360,14 +381,109 @@ export class PracticesService {
         );
       }
 
+      const existingCredentialRecord = updatePracticeDto.emrCredential
+        ? await (this.prisma as any).emrCredential.findFirst({
+            where: { ownerId: id, ownerType: 'PRACTICE' },
+            orderBy: { createdAt: 'desc' },
+          })
+        : null;
+
+      let validatedEmrCredential: {
+        provider: EmrProvider;
+        encryptedData: string;
+        fingerprint: string;
+        label?: string;
+        locationId: string | null;
+      } | null = null;
+
+      if (updatePracticeDto.emrCredential) {
+        const resolvedLabel =
+          updatePracticeDto.emrCredential.label !== undefined
+            ? updatePracticeDto.emrCredential.label
+            : (existingCredentialRecord?.label ?? undefined);
+
+        const rawLocation = updatePracticeDto.emrCredential.locationId;
+        let resolvedLocationId: string | null = null;
+        if (typeof rawLocation === 'string') {
+          const trimmed = rawLocation.trim();
+          resolvedLocationId = trimmed.length > 0 ? trimmed : null;
+        } else if (rawLocation) {
+          resolvedLocationId = rawLocation;
+        } else {
+          resolvedLocationId = existingCredentialRecord?.locationId ?? null;
+        }
+
+        let reusedExisting = false;
+        if (existingCredentialRecord?.encryptedData) {
+          try {
+            const candidatePayload = this.buildCredentialPayload(
+              updatePracticeDto.emrCredential,
+            );
+            const candidateFingerprint =
+              this.encryptionService.createFingerprint(
+                JSON.stringify(candidatePayload),
+              );
+
+            if (
+              candidateFingerprint === existingCredentialRecord.fingerprint &&
+              existingCredentialRecord.provider ===
+                updatePracticeDto.emrCredential.provider
+            ) {
+              validatedEmrCredential = {
+                provider: existingCredentialRecord.provider as EmrProvider,
+                encryptedData: existingCredentialRecord.encryptedData,
+                fingerprint: existingCredentialRecord.fingerprint,
+                label: resolvedLabel,
+                locationId: resolvedLocationId,
+              };
+              reusedExisting = true;
+            }
+          } catch (comparisonError) {
+            // Ignore fingerprint comparison errors; fall back to full validation
+            reusedExisting = false;
+          }
+        }
+
+        if (!reusedExisting) {
+          const validationResult = await this.validateEmrCredential(
+            updatePracticeDto.emrCredential,
+          );
+          if (!validationResult.isValid) {
+            throw new BadRequestException(
+              `EMR credential validation failed: ${
+                validationResult.error || 'Unknown error'
+              }`,
+            );
+          }
+          if (
+            !validationResult.encryptedData ||
+            !validationResult.fingerprint
+          ) {
+            throw new BadRequestException(
+              'EMR credential validation did not return encrypted data',
+            );
+          }
+
+          validatedEmrCredential = {
+            provider: updatePracticeDto.emrCredential.provider,
+            encryptedData: validationResult.encryptedData,
+            fingerprint: validationResult.fingerprint,
+            label: resolvedLabel,
+            locationId: resolvedLocationId,
+          };
+        }
+      }
+
       const result = await this.prisma.$transaction(async (tx) => {
         const practice = await tx.practice.update({
           where: { id },
           data: {
             ...(updatePracticeDto.name && { name: updatePracticeDto.name }),
-            ...(updatePracticeDto.emrType !== undefined && {
-              emrType: updatePracticeDto.emrType,
-            }),
+            ...(updatePracticeDto.emrType !== undefined
+              ? { emrType: updatePracticeDto.emrType }
+              : validatedEmrCredential
+                ? { emrType: validatedEmrCredential.provider }
+                : {}),
           },
           include: {
             createdByUser: {
@@ -380,15 +496,70 @@ export class PracticesService {
           },
         });
 
+        if (validatedEmrCredential) {
+          const existingCredential = await (tx as any).emrCredential.findFirst({
+            where: { ownerId: id, ownerType: 'PRACTICE' },
+            orderBy: { createdAt: 'desc' },
+          });
+
+          if (
+            existingCredential?.fingerprint !==
+            validatedEmrCredential.fingerprint
+          ) {
+            const duplicate = await (tx as any).emrCredential.findUnique({
+              where: { fingerprint: validatedEmrCredential.fingerprint },
+            });
+            if (duplicate && duplicate.id !== existingCredential?.id) {
+              throw new BadRequestException(
+                'These EMR credentials already exist.',
+              );
+            }
+          }
+
+          const baseData = {
+            provider: validatedEmrCredential.provider,
+            label:
+              validatedEmrCredential.label ??
+              existingCredential?.label ??
+              `${validatedEmrCredential.provider} Credentials`,
+            locationId: validatedEmrCredential.locationId,
+            encryptedData: validatedEmrCredential.encryptedData,
+            fingerprint: validatedEmrCredential.fingerprint,
+            isValid: true,
+            lastValidatedAt: new Date(),
+            validationError: null,
+          };
+
+          if (existingCredential) {
+            await (tx as any).emrCredential.update({
+              where: { id: existingCredential.id },
+              data: baseData,
+            });
+          } else {
+            await (tx as any).emrCredential.create({
+              data: {
+                ownerId: id,
+                ownerType: 'PRACTICE',
+                ...baseData,
+              },
+            });
+          }
+        }
+
         if (updatePracticeDto.serviceFees) {
-          // Replace service fees with provided set
+          // Detach linked appointments before replacing the service fee catalog to avoid FK violations
+          await tx.appointment.updateMany({
+            where: { practiceId: id, serviceFeeId: { not: null } },
+            data: { serviceFeeId: null },
+          });
+
           await tx.serviceFee.deleteMany({ where: { practiceId: id } });
           if (updatePracticeDto.serviceFees.length > 0) {
             await tx.serviceFee.createMany({
               data: updatePracticeDto.serviceFees.map((fee) => ({
                 practiceId: id,
                 serviceName: fee.serviceName,
-                serviceType: (fee as any).serviceType,
+                serviceType: fee.serviceType as any,
                 price: fee.price,
               })),
             });
@@ -406,6 +577,9 @@ export class PracticesService {
       ) {
         throw error;
       }
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
           throw new BadRequestException(
@@ -413,7 +587,11 @@ export class PracticesService {
           );
         }
       }
-      throw new BadRequestException('Failed to update practice');
+      throw new BadRequestException(
+        `Failed to update practice: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
     }
   }
 

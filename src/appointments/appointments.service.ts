@@ -34,7 +34,7 @@ export class AppointmentsService {
   async create(
     createAppointmentDto: CreateAppointmentDto,
     user: User,
-  ): Promise<Appointment> {
+  ): Promise<Appointment & { emrBookingResult?: any }> {
     // Verify patient exists
     const patient = await this.prisma.patient.findUnique({
       where: { id: createAppointmentDto.patientId },
@@ -141,6 +141,7 @@ export class AppointmentsService {
     });
 
     // Attempt EMR booking for Mindbody if credentials exist
+    let emrBookingResult: any = null;
     try {
       const emr = await (this.prisma as any).emrCredential.findFirst({
         where: {
@@ -153,7 +154,34 @@ export class AppointmentsService {
 
       if (emr?.encryptedData) {
         const creds = this.encryption.decryptEmrData(emr.encryptedData);
-        // Resolve Mindbody mapping from practice.connectorConfig
+        /**
+         * Resolve Mindbody mapping from practice.connectorConfig
+         *
+         * Expected connectorConfig structure:
+         * {
+         *   "mindbody": {
+         *     "staffId": 123,          // Required: Staff member ID in Mindbody
+         *     "locationId": 456,       // Required: Location ID in Mindbody
+         *     "sessionTypeId": 789,    // Default session type (can be overridden)
+         *     "serviceTypeMap": {      // Optional: Map service types to session types
+         *       "consult": { "sessionTypeId": 100 },
+         *       "surgery": { "sessionTypeId": 200 },
+         *       "non_surgical": { "sessionTypeId": 300 }
+         *     },
+         *     "serviceFeeMap": {       // Optional: Map specific services to session types
+         *       "service-fee-uuid-1": { "sessionTypeId": 400 },
+         *       "service-fee-uuid-2": { "sessionTypeId": 500 }
+         *     }
+         *   }
+         * }
+         *
+         * Priority order for sessionTypeId:
+         * 1. serviceFeeMap[serviceFeeId].sessionTypeId
+         * 2. serviceTypeMap[serviceType].sessionTypeId
+         * 3. default sessionTypeId
+         *
+         * For clientId, we use patient.amReferralId (patient's Mindbody client ID)
+         */
         let staffId: number | string | undefined;
         let locationId: number | string | undefined;
         let sessionTypeId: number | string | undefined;
@@ -166,54 +194,49 @@ export class AppointmentsService {
             const mb = cfg?.mindbody ?? cfg;
             const svcType = (createAppointmentDto as any).serviceType;
             const svcFeeId = (createAppointmentDto as any).serviceFeeId;
+
+            // Extract staff and location IDs
             staffId = mb?.staffId ?? mb?.default?.staffId;
             locationId = mb?.locationId ?? mb?.default?.locationId;
+
             // Priority: explicit map by serviceFeeId, then by serviceType, then default
             if (svcFeeId && mb?.serviceFeeMap?.[svcFeeId]?.sessionTypeId) {
               sessionTypeId = mb.serviceFeeMap[svcFeeId].sessionTypeId;
+              this.logger.log(
+                `Using serviceFeeMap sessionTypeId for ${svcFeeId}: ${sessionTypeId}`,
+              );
             } else if (
               svcType &&
               mb?.serviceTypeMap?.[svcType]?.sessionTypeId
             ) {
               sessionTypeId = mb.serviceTypeMap[svcType].sessionTypeId;
+              this.logger.log(
+                `Using serviceTypeMap sessionTypeId for ${svcType}: ${sessionTypeId}`,
+              );
             } else {
               sessionTypeId = mb?.sessionTypeId ?? mb?.default?.sessionTypeId;
+              this.logger.log(`Using default sessionTypeId: ${sessionTypeId}`);
             }
           }
         } catch (e) {
           this.logger.warn(
             'Failed to parse practice.connectorConfig for Mindbody mapping',
+            e,
           );
         }
 
-        // Check if patient already has a MindBody client ID, create one if not
-        let clientId = patient.amReferralId;
-        if (!clientId) {
-          try {
-            const mindbodyClient = await this.mindbody.addClient({
-              firstName: patient.name.split(' ')[0] || patient.name,
-              lastName: patient.name.split(' ').slice(1).join(' ') || '',
-              email: patient.email,
-              phone: patient.phone || '',
-              dateOfBirth: patient.dob,
-            });
+        // Use patient's amReferralId as the clientId for Mindbody booking
+        const clientId = patient.amReferralId;
 
-            clientId = mindbodyClient.id;
-
-            // Update patient with the new MindBody client ID
-            await this.prisma.patient.update({
-              where: { id: patient.id },
-              data: { amReferralId: clientId },
-            });
-
-            this.logger.log(
-              `Created MindBody client for patient ${patient.id}: ${clientId}`,
-            );
-          } catch (error) {
-            this.logger.warn('Failed to create MindBody client:', error);
-            // Continue with booking even if client creation fails
-          }
-        }
+        this.logger.log(
+          `Attempting Mindbody booking for patient ${patient.id} with clientId: ${clientId || 'NOT SET'}`,
+        );
+        this.logger.log(
+          `Practice connectorConfig: ${JSON.stringify((practice as any).connectorConfig)}`,
+        );
+        this.logger.log(
+          `Booking params - staffId: ${staffId}, locationId: ${locationId}, sessionTypeId: ${sessionTypeId}`,
+        );
 
         const bookingResult = await this.mindbody.bookAppointment(
           {
@@ -237,6 +260,12 @@ export class AppointmentsService {
           },
         );
 
+        emrBookingResult = bookingResult;
+        this.logger.log(
+          `EMR booking result for appointment ${created.id}:`,
+          JSON.stringify(bookingResult),
+        );
+
         if (bookingResult.success && bookingResult.appointmentId) {
           await this.prisma.appointment.update({
             where: { id: created.id },
@@ -250,9 +279,13 @@ export class AppointmentsService {
       }
     } catch (err) {
       this.logger.error('EMR booking error', err);
+      emrBookingResult = {
+        success: false,
+        error: err instanceof Error ? err.message : 'Unknown error',
+      };
     }
 
-    return created as any;
+    return { ...created, emrBookingResult } as any;
   }
 
   async findAll(

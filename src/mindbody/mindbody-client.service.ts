@@ -13,6 +13,34 @@ export interface MindBodyClientData {
 export class MindBodyClientService {
   constructor(private prisma: PrismaService) {}
 
+  async getPracticeStaffId(
+    practiceId: string,
+  ): Promise<{ staffId?: string | number } | null> {
+    try {
+      const practice = await this.prisma.practice.findUnique({
+        where: { id: practiceId },
+      });
+
+      if (!practice || !practice.connectorConfig) {
+        return null;
+      }
+
+      const config =
+        typeof practice.connectorConfig === 'string'
+          ? JSON.parse(practice.connectorConfig)
+          : practice.connectorConfig;
+
+      const mindbodyConfig = config?.mindbody ?? config;
+      const staffId =
+        mindbodyConfig?.staffId ?? mindbodyConfig?.default?.staffId;
+
+      return { staffId };
+    } catch (error) {
+      console.error('Failed to get practice staffId:', error);
+      return null;
+    }
+  }
+
   async ensureClientExists(
     patientId: string,
     mindbodyService: any,

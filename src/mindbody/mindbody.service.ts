@@ -37,9 +37,17 @@ export class MindbodyService {
 
       if (!tokenResponse.ok) {
         const errorData = await tokenResponse.json().catch(() => ({}));
-        const errorMessage =
+        let errorMessage =
           errorData.Error?.Message ||
           `Authentication failed: HTTP ${tokenResponse.status}: ${tokenResponse.statusText}`;
+
+        // Provide helpful context for staff identity errors
+        if (
+          errorMessage.includes('Staff identity authentication failed') ||
+          errorMessage.includes('staff identity')
+        ) {
+          errorMessage = `${errorMessage}. This typically means:\n1. You need to provide a valid Site ID (the numeric ID of your Mindbody business)\n2. The API key is business-specific (not an aggregator key)\n3. The staff username/password don't have API access permissions in Mindbody\n\nPlease check your Mindbody account settings and ensure the Site ID is correct.`;
+        }
 
         this.logger.error(`MindBody authentication failed: ${errorMessage}`);
         return {

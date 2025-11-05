@@ -42,7 +42,7 @@ export class MindbodyController {
         this.mindbodyService,
       );
 
-      // Get practice to extract staffId from connectorConfig
+      // Note: practice connectorConfig field has been removed - staffId no longer available
       const practice = await this.mindbodyClientService.getPracticeStaffId(
         body.practiceId,
       );

@@ -21,20 +21,13 @@ export class MindBodyClientService {
         where: { id: practiceId },
       });
 
-      if (!practice || !practice.connectorConfig) {
+      if (!practice) {
         return null;
       }
 
-      const config =
-        typeof practice.connectorConfig === 'string'
-          ? JSON.parse(practice.connectorConfig)
-          : practice.connectorConfig;
-
-      const mindbodyConfig = config?.mindbody ?? config;
-      const staffId =
-        mindbodyConfig?.staffId ?? mindbodyConfig?.default?.staffId;
-
-      return { staffId };
+      // Note: connectorConfig field has been removed from practices table
+      // Return undefined staffId since this configuration is no longer available
+      return { staffId: undefined };
     } catch (error) {
       console.error('Failed to get practice staffId:', error);
       return null;

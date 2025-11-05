@@ -155,84 +155,24 @@ export class AppointmentsService {
       if (emr?.encryptedData) {
         const creds = this.encryption.decryptEmrData(emr.encryptedData);
         /**
-         * Resolve Mindbody mapping from practice.connectorConfig
-         *
-         * Expected connectorConfig structure:
-         * {
-         *   "mindbody": {
-         *     "staffId": 123,          // Required: Staff member ID in Mindbody
-         *     "locationId": 456,       // Required: Location ID in Mindbody
-         *     "sessionTypeId": 789,    // Default session type (can be overridden)
-         *     "serviceTypeMap": {      // Optional: Map service types to session types
-         *       "consult": { "sessionTypeId": 100 },
-         *       "surgery": { "sessionTypeId": 200 },
-         *       "non_surgical": { "sessionTypeId": 300 }
-         *     },
-         *     "serviceFeeMap": {       // Optional: Map specific services to session types
-         *       "service-fee-uuid-1": { "sessionTypeId": 400 },
-         *       "service-fee-uuid-2": { "sessionTypeId": 500 }
-         *     }
-         *   }
-         * }
-         *
-         * Priority order for sessionTypeId:
-         * 1. serviceFeeMap[serviceFeeId].sessionTypeId
-         * 2. serviceTypeMap[serviceType].sessionTypeId
-         * 3. default sessionTypeId
-         *
-         * For clientId, we use patient.amReferralId (patient's Mindbody client ID)
+         * Note: connectorConfig field has been removed from practices table.
+         * MindBody integration configuration is no longer available through this field.
+         * Consider implementing alternative configuration storage if needed.
          */
         let staffId: number | string | undefined;
         let locationId: number | string | undefined;
         let sessionTypeId: number | string | undefined;
 
-        try {
-          const cfgRaw = (practice as any).connectorConfig;
-          if (cfgRaw) {
-            const cfg =
-              typeof cfgRaw === 'string' ? JSON.parse(cfgRaw) : cfgRaw;
-            const mb = cfg?.mindbody ?? cfg;
-            const svcType = (createAppointmentDto as any).serviceType;
-            const svcFeeId = (createAppointmentDto as any).serviceFeeId;
-
-            // Extract staff and location IDs
-            staffId = mb?.staffId ?? mb?.default?.staffId;
-            locationId = mb?.locationId ?? mb?.default?.locationId;
-
-            // Priority: explicit map by serviceFeeId, then by serviceType, then default
-            if (svcFeeId && mb?.serviceFeeMap?.[svcFeeId]?.sessionTypeId) {
-              sessionTypeId = mb.serviceFeeMap[svcFeeId].sessionTypeId;
-              this.logger.log(
-                `Using serviceFeeMap sessionTypeId for ${svcFeeId}: ${sessionTypeId}`,
-              );
-            } else if (
-              svcType &&
-              mb?.serviceTypeMap?.[svcType]?.sessionTypeId
-            ) {
-              sessionTypeId = mb.serviceTypeMap[svcType].sessionTypeId;
-              this.logger.log(
-                `Using serviceTypeMap sessionTypeId for ${svcType}: ${sessionTypeId}`,
-              );
-            } else {
-              sessionTypeId = mb?.sessionTypeId ?? mb?.default?.sessionTypeId;
-              this.logger.log(`Using default sessionTypeId: ${sessionTypeId}`);
-            }
-          }
-        } catch (e) {
-          this.logger.warn(
-            'Failed to parse practice.connectorConfig for Mindbody mapping',
-            e,
-          );
-        }
+        // Legacy connectorConfig support removed - these values will be undefined
+        this.logger.warn(
+          'MindBody connectorConfig no longer available - integration may not work properly',
+        );
 
         // Use patient's amReferralId as the clientId for Mindbody booking
         const clientId = patient.amReferralId;
 
         this.logger.log(
           `Attempting Mindbody booking for patient ${patient.id} with clientId: ${clientId || 'NOT SET'}`,
-        );
-        this.logger.log(
-          `Practice connectorConfig: ${JSON.stringify((practice as any).connectorConfig)}`,
         );
         this.logger.log(
           `Booking params - staffId: ${staffId}, locationId: ${locationId}, sessionTypeId: ${sessionTypeId}`,

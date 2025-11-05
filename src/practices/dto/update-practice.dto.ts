@@ -29,12 +29,4 @@ export class UpdatePracticeDto {
   @IsString()
   @MaxLength(50)
   emrType?: string;
-
-  @IsOptional()
-  @IsString()
-  connectorConfig?: string;
-
-  @IsOptional()
-  @IsString()
-  feeModel?: string;
 }

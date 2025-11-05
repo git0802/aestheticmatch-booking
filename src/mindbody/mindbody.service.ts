@@ -128,7 +128,7 @@ export class MindbodyService {
     payload: {
       startDateTime: string;
       notes?: string;
-      // Required mapping from practice connectorConfig
+      // Note: practice connectorConfig field has been removed
       staffId?: string | number;
       locationId?: string | number;
       sessionTypeId?: string | number;
@@ -203,7 +203,7 @@ export class MindbodyService {
           return {
             success: false,
             error:
-              'Mindbody booking requires clientId, staffId, locationId, and sessionTypeId. Provide these via practice.connectorConfig (and ensure patient has an email to auto-create client).',
+              'Mindbody booking requires clientId, staffId, locationId, and sessionTypeId. These configuration values are no longer available since practice.connectorConfig was removed.',
           };
         }
       }

@@ -73,6 +73,7 @@ export class PracticesService {
                 label:
                   emrCredential.label ||
                   `${emrCredential.provider} Credentials`,
+                locationId: emrCredential.locationId || null,
                 encryptedData: validatedEmrCredential.encryptedData,
                 fingerprint: validatedEmrCredential.fingerprint,
                 isValid: true,
@@ -232,6 +233,7 @@ export class PracticesService {
                 id: true,
                 provider: true,
                 label: true,
+                locationId: true,
                 isValid: true,
                 lastValidatedAt: true,
                 validationError: true,
@@ -285,6 +287,7 @@ export class PracticesService {
             id: true,
             provider: true,
             label: true,
+            locationId: true,
             isValid: true,
             lastValidatedAt: true,
             validationError: true,
@@ -364,12 +367,6 @@ export class PracticesService {
             ...(updatePracticeDto.name && { name: updatePracticeDto.name }),
             ...(updatePracticeDto.emrType !== undefined && {
               emrType: updatePracticeDto.emrType,
-            }),
-            ...(updatePracticeDto.connectorConfig !== undefined && {
-              connectorConfig: updatePracticeDto.connectorConfig,
-            }),
-            ...(updatePracticeDto.feeModel !== undefined && {
-              feeModel: updatePracticeDto.feeModel,
             }),
           },
           include: {

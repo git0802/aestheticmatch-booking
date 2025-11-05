@@ -61,6 +61,7 @@ model EmrCredential {
   ownerId            String      @map("owner_id") @db.Uuid
   ownerType          OwnerType   @map("owner_type") @default(USER)
   label              String?     @db.VarChar(100)
+  locationId         String?     @map("location_id") @db.VarChar(100)
   encryptedData      String      @map("encrypted_data") @db.Text
   fingerprint        String      @unique @db.VarChar(128)
   isValid            Boolean     @default(false) @map("is_valid")
@@ -202,8 +203,6 @@ model Practice {
   id               String   @id @default(uuid()) @db.Uuid
   name             String   @db.VarChar(255)
   emrType          String?  @map("emr_type") @db.VarChar(50)
-  connectorConfig  String?  @map("connector_config") @db.Text
-  feeModel         String?  @map("fee_model") @db.Text
   createdAt        DateTime @default(now()) @map("created_at")
   createdBy        String   @map("created_by")
 

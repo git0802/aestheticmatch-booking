@@ -42,6 +42,11 @@ export class EmrCredentialDto {
   @MaxLength(100)
   label?: string;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  locationId?: string;
+
   @IsString()
   @IsNotEmpty()
   apiKey: string;
@@ -84,12 +89,4 @@ export class CreatePracticeDto {
   @IsString()
   @MaxLength(50)
   emrType?: string;
-
-  @IsOptional()
-  @IsString()
-  connectorConfig?: string;
-
-  @IsOptional()
-  @IsString()
-  feeModel?: string;
 }

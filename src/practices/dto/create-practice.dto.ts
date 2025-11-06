@@ -89,4 +89,19 @@ export class CreatePracticeDto {
   @IsString()
   @MaxLength(50)
   emrType?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  mindbodyStaffId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  mindbodyLocationId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  mindbodySessionTypeId?: string;
 }

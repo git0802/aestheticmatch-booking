@@ -84,6 +84,119 @@ export class AppointmentsService {
       }
     }
 
+    // Attempt EMR booking for Mindbody BEFORE creating in database
+    let emrBookingResult: any = null;
+    let emrAppointmentId: string | undefined = undefined;
+
+    try {
+      const emr = await (this.prisma as any).emrCredential.findFirst({
+        where: {
+          ownerId: practice.id,
+          ownerType: 'PRACTICE',
+          provider: 'MINDBODY',
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (emr?.encryptedData) {
+        const creds = this.encryption.decryptEmrData(emr.encryptedData);
+
+        // Get Mindbody configuration from practice
+        let staffId: number | string | undefined = (practice as any)
+          .mindbodyStaffId;
+        let locationId: number | string | undefined = (practice as any)
+          .mindbodyLocationId;
+        let sessionTypeId: number | string | undefined = (practice as any)
+          .mindbodySessionTypeId;
+
+        // Use patient's amReferralId as the clientId for Mindbody booking
+        const clientId = patient.amReferralId;
+
+        // Check if Mindbody is fully configured (all required fields present)
+        const hasMindbodyConfig =
+          staffId && locationId && sessionTypeId && clientId;
+
+        if (!hasMindbodyConfig) {
+          // Log warning but allow appointment creation without EMR booking
+          this.logger.warn(
+            `Mindbody credentials exist for practice ${practice.id}, but configuration is incomplete. ` +
+              `Missing: ${!staffId ? 'staffId ' : ''}${!locationId ? 'locationId ' : ''}${!sessionTypeId ? 'sessionTypeId ' : ''}${!clientId ? 'clientId ' : ''}` +
+              `Appointment will be created locally without EMR booking.`,
+          );
+          emrBookingResult = {
+            success: false,
+            error: `Mindbody configuration incomplete. Please configure: ${!staffId ? 'Staff ID, ' : ''}${!locationId ? 'Location ID, ' : ''}${!sessionTypeId ? 'Session Type ID, ' : ''}${!clientId ? 'Patient Client ID' : ''}`,
+          };
+        } else {
+          // All configuration present - attempt EMR booking
+          this.logger.log(
+            `Attempting Mindbody booking for patient ${patient.id} with clientId: ${clientId}`,
+          );
+          this.logger.log(
+            `Booking params - staffId: ${staffId}, locationId: ${locationId}, sessionTypeId: ${sessionTypeId}`,
+          );
+
+          const appointmentDate = new Date(createAppointmentDto.date);
+
+          const bookingResult = await this.mindbody.bookAppointment(
+            {
+              apiKey: creds.apiKey,
+              username: creds.username,
+              password: creds.password,
+              siteId: creds.siteId,
+            },
+            {
+              startDateTime: appointmentDate.toISOString(),
+              notes: `AestheticMatch booking for patient ${patient.id}`,
+              staffId,
+              locationId,
+              sessionTypeId,
+              clientId: clientId || undefined,
+              patient: {
+                name: patient.name ?? null,
+                email: patient.email ?? null,
+                phone: patient.phone ?? null,
+              },
+            },
+          );
+
+          emrBookingResult = bookingResult;
+          this.logger.log(
+            `EMR booking result for patient ${patient.id}:`,
+            JSON.stringify(bookingResult),
+          );
+
+          if (bookingResult.success && bookingResult.appointmentId) {
+            emrAppointmentId = bookingResult.appointmentId;
+            this.logger.log(
+              `Mindbody booking successful with appointment ID: ${emrAppointmentId}`,
+            );
+          } else if (!bookingResult.success) {
+            // EMR booking failed - throw error to prevent database creation
+            const errorMsg =
+              bookingResult.error || 'Unknown error during Mindbody booking';
+            this.logger.error(
+              `Mindbody booking failed for patient ${patient.id}: ${errorMsg}`,
+            );
+            throw new Error(
+              `Failed to book appointment in Mindbody: ${errorMsg}`,
+            );
+          }
+        }
+      } else {
+        // No EMR credentials configured - allow appointment creation
+        this.logger.log(
+          `No Mindbody credentials found for practice ${practice.id}, creating appointment without EMR booking`,
+        );
+      }
+    } catch (err) {
+      this.logger.error('EMR booking error', err);
+      const errorMsg =
+        err instanceof Error ? err.message : 'Unknown error occurred';
+      // Re-throw the error to prevent appointment creation
+      throw new Error(`Failed to book appointment in Mindbody: ${errorMsg}`);
+    }
+
     // Check Prisma client support for fields (handles client not regenerated yet)
     const supportsMode = this.hasAppointmentField('mode');
 
@@ -94,7 +207,8 @@ export class AppointmentsService {
       status: createAppointmentDto.status,
       date: new Date(createAppointmentDto.date),
       isReturnVisit: !!createAppointmentDto.isReturnVisit,
-      emrAppointmentId: createAppointmentDto.emrAppointmentId,
+      emrAppointmentId:
+        emrAppointmentId || createAppointmentDto.emrAppointmentId,
     };
 
     if (supportsMode) {
@@ -139,91 +253,6 @@ export class AppointmentsService {
         },
       },
     });
-
-    // Attempt EMR booking for Mindbody if credentials exist
-    let emrBookingResult: any = null;
-    try {
-      const emr = await (this.prisma as any).emrCredential.findFirst({
-        where: {
-          ownerId: practice.id,
-          ownerType: 'PRACTICE',
-          provider: 'MINDBODY',
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-
-      if (emr?.encryptedData) {
-        const creds = this.encryption.decryptEmrData(emr.encryptedData);
-        /**
-         * Note: connectorConfig field has been removed from practices table.
-         * MindBody integration configuration is no longer available through this field.
-         * Consider implementing alternative configuration storage if needed.
-         */
-        let staffId: number | string | undefined;
-        let locationId: number | string | undefined;
-        let sessionTypeId: number | string | undefined;
-
-        // Legacy connectorConfig support removed - these values will be undefined
-        this.logger.warn(
-          'MindBody connectorConfig no longer available - integration may not work properly',
-        );
-
-        // Use patient's amReferralId as the clientId for Mindbody booking
-        const clientId = patient.amReferralId;
-
-        this.logger.log(
-          `Attempting Mindbody booking for patient ${patient.id} with clientId: ${clientId || 'NOT SET'}`,
-        );
-        this.logger.log(
-          `Booking params - staffId: ${staffId}, locationId: ${locationId}, sessionTypeId: ${sessionTypeId}`,
-        );
-
-        const bookingResult = await this.mindbody.bookAppointment(
-          {
-            apiKey: creds.apiKey,
-            username: creds.username,
-            password: creds.password,
-            siteId: creds.siteId,
-          },
-          {
-            startDateTime: created.date.toISOString(),
-            notes: `AestheticMatch booking for patient ${created.patientId}`,
-            staffId,
-            locationId,
-            sessionTypeId,
-            clientId: clientId || undefined,
-            patient: {
-              name: (created as any)?.patient?.name ?? null,
-              email: (created as any)?.patient?.email ?? null,
-              phone: (created as any)?.patient?.phone ?? null,
-            },
-          },
-        );
-
-        emrBookingResult = bookingResult;
-        this.logger.log(
-          `EMR booking result for appointment ${created.id}:`,
-          JSON.stringify(bookingResult),
-        );
-
-        if (bookingResult.success && bookingResult.appointmentId) {
-          await this.prisma.appointment.update({
-            where: { id: created.id },
-            data: { emrAppointmentId: bookingResult.appointmentId },
-          });
-        } else if (!bookingResult.success) {
-          this.logger.warn(
-            `Mindbody booking skipped/failed for appointment ${created.id}: ${bookingResult.error || 'Unknown error'}`,
-          );
-        }
-      }
-    } catch (err) {
-      this.logger.error('EMR booking error', err);
-      emrBookingResult = {
-        success: false,
-        error: err instanceof Error ? err.message : 'Unknown error',
-      };
-    }
 
     return { ...created, emrBookingResult } as any;
   }

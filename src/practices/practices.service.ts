@@ -28,7 +28,14 @@ export class PracticesService {
       );
     }
 
-    const { name, emrCredential, serviceFees } = createPracticeDto;
+    const {
+      name,
+      emrCredential,
+      serviceFees,
+      mindbodyStaffId,
+      mindbodyLocationId,
+      mindbodySessionTypeId,
+    } = createPracticeDto;
 
     // Validate EMR credentials if provided
     let validatedEmrCredential: {
@@ -59,7 +66,10 @@ export class PracticesService {
               name,
               emrType: emrCredential?.provider || null,
               createdBy: user.id,
-            },
+              ...(mindbodyStaffId && { mindbodyStaffId }),
+              ...(mindbodyLocationId && { mindbodyLocationId }),
+              ...(mindbodySessionTypeId && { mindbodySessionTypeId }),
+            } as any,
           });
           console.log('Practice created:', practice.id);
 
@@ -484,7 +494,16 @@ export class PracticesService {
               : validatedEmrCredential
                 ? { emrType: validatedEmrCredential.provider }
                 : {}),
-          },
+            ...(updatePracticeDto.mindbodyStaffId !== undefined && {
+              mindbodyStaffId: updatePracticeDto.mindbodyStaffId,
+            }),
+            ...(updatePracticeDto.mindbodyLocationId !== undefined && {
+              mindbodyLocationId: updatePracticeDto.mindbodyLocationId,
+            }),
+            ...(updatePracticeDto.mindbodySessionTypeId !== undefined && {
+              mindbodySessionTypeId: updatePracticeDto.mindbodySessionTypeId,
+            }),
+          } as any,
           include: {
             createdByUser: {
               select: {

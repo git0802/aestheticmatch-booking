@@ -333,6 +333,144 @@ export class MindbodyService {
   }
 
   /**
+   * Fetch available locations for the business.
+   */
+  async getLocations(credentials: MindbodyAuthCredentials): Promise<any[]> {
+    try {
+      const { accessToken, siteHeader } =
+        await this.issueUserToken(credentials);
+      const res = await fetch(`${this.MINDBODY_API_BASE_URL}site/locations`, {
+        method: 'GET',
+        headers: this.buildHeaders(credentials.apiKey, siteHeader, accessToken),
+      });
+      if (!res.ok) return [];
+      const data = await this.safeJson(res);
+      return Array.isArray(data?.Locations) ? data.Locations : [];
+    } catch (e) {
+      this.logger.warn('Mindbody getLocations failed', e);
+      return [];
+    }
+  }
+
+  /**
+   * Fetch available session types.
+   */
+  async getSessionTypes(credentials: MindbodyAuthCredentials): Promise<any[]> {
+    try {
+      const { accessToken, siteHeader } =
+        await this.issueUserToken(credentials);
+      const res = await fetch(
+        `${this.MINDBODY_API_BASE_URL}site/sessiontypes`,
+        {
+          method: 'GET',
+          headers: this.buildHeaders(
+            credentials.apiKey,
+            siteHeader,
+            accessToken,
+          ),
+        },
+      );
+      if (!res.ok) return [];
+      const data = await this.safeJson(res);
+      return Array.isArray(data?.SessionTypes) ? data.SessionTypes : [];
+    } catch (e) {
+      this.logger.warn('Mindbody getSessionTypes failed', e);
+      return [];
+    }
+  }
+
+  /**
+   * Fetch bookable items (availabilities) given location + sessionType.
+   * Optionally restrict by locationId/sessionTypeId lists.
+   */
+  async getBookableItems(params: {
+    credentials: MindbodyAuthCredentials;
+    locationId: number | string;
+    sessionTypeId: number | string;
+  }): Promise<any[]> {
+    try {
+      const { credentials, locationId, sessionTypeId } = params;
+      const { accessToken, siteHeader } =
+        await this.issueUserToken(credentials);
+      const url = `${this.MINDBODY_API_BASE_URL}appointment/bookableitems?sessionTypeIds=${encodeURIComponent(
+        String(sessionTypeId),
+      )}&locationIds=${encodeURIComponent(String(locationId))}`;
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: this.buildHeaders(credentials.apiKey, siteHeader, accessToken),
+      });
+      if (!res.ok) return [];
+      const data = await this.safeJson(res);
+      return Array.isArray(data?.BookableItems)
+        ? data.BookableItems
+        : Array.isArray(data?.Availabilities)
+          ? data.Availabilities
+          : [];
+    } catch (e) {
+      this.logger.warn('Mindbody getBookableItems failed', e);
+      return [];
+    }
+  }
+
+  /**
+   * Best-effort resolution of booking parameters (staff/location/sessionType)
+   * when they are not explicitly configured. We pick the first sensible
+   * entries, preferring names that contain "consult" for session type.
+   */
+  async resolveBookingParams(params: {
+    credentials: MindbodyAuthCredentials;
+    desiredStartDateTime?: string; // ISO string used only for future enhancement
+  }): Promise<{
+    locationId?: number | string;
+    sessionTypeId?: number | string;
+    staffId?: number | string;
+    debug?: any;
+  }> {
+    const debug: any = {};
+    try {
+      const { credentials } = params;
+      // Re-use underlying token issuance once so we don't duplicate network calls unnecessarily.
+      // (Issue token separately inside helper methods today; future optimization could share it.)
+      const locations = await this.getLocations(credentials);
+      debug.locationsCount = locations.length;
+      const location =
+        locations.find((l: any) => l?.Id || l?.ID) || locations[0];
+      const locationId = location ? location.Id || location.ID : undefined;
+
+      const sessionTypes = await this.getSessionTypes(credentials);
+      debug.sessionTypesCount = sessionTypes.length;
+      const preferred = sessionTypes.find((s: any) =>
+        String(s?.Name || s?.NameDisplay || '')
+          .toLowerCase()
+          .includes('consult'),
+      );
+      const sessionType = preferred || sessionTypes[0];
+      const sessionTypeId = sessionType
+        ? sessionType.Id || sessionType.ID
+        : undefined;
+
+      let staffId: number | string | undefined = undefined;
+      if (locationId && sessionTypeId) {
+        const bookable = await this.getBookableItems({
+          credentials,
+          locationId,
+          sessionTypeId,
+        });
+        debug.bookableItemsCount = bookable.length;
+        // Bookable items may have Staff or Availability objects
+        const first = bookable[0];
+        const staff = first?.Staff || first?.staff || first?.AppointmentStaff;
+        staffId = staff?.Id || staff?.ID;
+      }
+
+      return { locationId, sessionTypeId, staffId, debug };
+    } catch (e) {
+      this.logger.warn('resolveBookingParams failed', e);
+      return { debug: { error: (e as Error).message, ...debug } } as any;
+    }
+  }
+
+  /**
    * Attempt to book an appointment in Mindbody.
    * Note: Real booking requires mapped staffId, locationId, sessionTypeId, and a Mindbody clientId.
    * This implementation validates credentials and returns a descriptive error until mapping is provided.

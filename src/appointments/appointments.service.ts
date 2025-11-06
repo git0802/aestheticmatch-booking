@@ -13,6 +13,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import type { User } from '../auth/interfaces/auth.interface';
 import { EncryptionService } from '../common/services/encryption.service';
 import { MindbodyService } from '../mindbody/mindbody.service';
+import { MindBodyClientService } from '../mindbody/mindbody-client.service';
 
 @Injectable()
 export class AppointmentsService {
@@ -22,6 +23,7 @@ export class AppointmentsService {
     private prisma: PrismaService,
     private encryption: EncryptionService,
     private mindbody: MindbodyService,
+    private mindbodyClient: MindBodyClientService,
   ) {}
 
   private hasAppointmentField(field: string): boolean {
@@ -99,58 +101,67 @@ export class AppointmentsService {
       });
 
       if (emr?.encryptedData) {
-        const creds = this.encryption.decryptEmrData(emr.encryptedData);
+        // Pull base context and ensure client exists (creates and updates patient if needed)
+        const context = await this.mindbodyClient.getPracticeContext(
+          practice.id,
+        );
+        const ensured = await this.mindbodyClient.ensureClientExists(
+          patient.id,
+          practice.id,
+          this.mindbody,
+          context,
+        );
 
-        // Get Mindbody configuration from EMR credential record
-        let staffId: number | string | undefined = (emr as any).mindbodyStaffId;
-        let locationId: number | string | undefined = (emr as any)
-          .mindbodyLocationId;
-        let sessionTypeId: number | string | undefined = (emr as any)
-          .mindbodySessionTypeId;
+        const clientId = ensured.clientId || patient.amReferralId || undefined;
 
-        // Use patient's amReferralId as the clientId for Mindbody booking
-        const clientId = patient.amReferralId;
+        // Resolve missing booking params from Mindbody on-the-fly
+        let staffId: number | string | undefined = context.staffId;
+        let locationId: number | string | undefined = context.locationId;
+        let sessionTypeId: number | string | undefined = context.sessionTypeId;
 
-        // Check if Mindbody is fully configured (all required fields present)
+        if (!staffId || !locationId || !sessionTypeId) {
+          const resolved = await this.mindbody.resolveBookingParams({
+            credentials: context.credentials,
+            desiredStartDateTime: new Date(
+              createAppointmentDto.date,
+            ).toISOString(),
+          });
+          staffId = staffId ?? resolved.staffId;
+          locationId = locationId ?? resolved.locationId;
+          sessionTypeId = sessionTypeId ?? resolved.sessionTypeId;
+
+          this.logger.log(
+            `Resolved Mindbody params for practice ${practice.id}: ` +
+              `staffId=${staffId}, locationId=${locationId}, sessionTypeId=${sessionTypeId}`,
+          );
+        }
+
         const hasMindbodyConfig =
-          staffId && locationId && sessionTypeId && clientId;
+          !!staffId && !!locationId && !!sessionTypeId && !!clientId;
 
         if (!hasMindbodyConfig) {
-          // Log warning but allow appointment creation without EMR booking
+          // Still incomplete after resolve attempt
           this.logger.warn(
-            `Mindbody credentials exist for practice ${practice.id}, but configuration is incomplete. ` +
-              `Missing: ${!staffId ? 'staffId ' : ''}${!locationId ? 'locationId ' : ''}${!sessionTypeId ? 'sessionTypeId ' : ''}${!clientId ? 'clientId ' : ''}` +
-              `Appointment will be created locally without EMR booking.`,
+            `Mindbody configuration could not be fully resolved for practice ${practice.id}. ` +
+              `Missing: ${!staffId ? 'staffId ' : ''}${!locationId ? 'locationId ' : ''}${!sessionTypeId ? 'sessionTypeId ' : ''}${!clientId ? 'clientId ' : ''}`,
           );
           emrBookingResult = {
             success: false,
             error: `Mindbody configuration incomplete. Please configure: ${!staffId ? 'Staff ID, ' : ''}${!locationId ? 'Location ID, ' : ''}${!sessionTypeId ? 'Session Type ID, ' : ''}${!clientId ? 'Patient Client ID' : ''}`,
           };
         } else {
-          // All configuration present - attempt EMR booking
-          this.logger.log(
-            `Attempting Mindbody booking for patient ${patient.id} with clientId: ${clientId}`,
-          );
-          this.logger.log(
-            `Booking params - staffId: ${staffId}, locationId: ${locationId}, sessionTypeId: ${sessionTypeId}`,
-          );
-
+          // Attempt booking
           const appointmentDate = new Date(createAppointmentDto.date);
 
           const bookingResult = await this.mindbody.bookAppointment(
-            {
-              apiKey: creds.apiKey,
-              username: creds.username,
-              password: creds.password,
-              siteId: creds.siteId,
-            },
+            context.credentials,
             {
               startDateTime: appointmentDate.toISOString(),
               notes: `AestheticMatch booking for patient ${patient.id}`,
               staffId,
               locationId,
               sessionTypeId,
-              clientId: clientId || undefined,
+              clientId: String(clientId),
               patient: {
                 name: patient.name ?? null,
                 email: patient.email ?? null,
@@ -171,7 +182,6 @@ export class AppointmentsService {
               `Mindbody booking successful with appointment ID: ${emrAppointmentId}`,
             );
           } else if (!bookingResult.success) {
-            // EMR booking failed - throw error to prevent database creation
             const errorMsg =
               bookingResult.error || 'Unknown error during Mindbody booking';
             this.logger.error(

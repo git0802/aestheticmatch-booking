@@ -101,12 +101,11 @@ export class AppointmentsService {
       if (emr?.encryptedData) {
         const creds = this.encryption.decryptEmrData(emr.encryptedData);
 
-        // Get Mindbody configuration from practice
-        let staffId: number | string | undefined = (practice as any)
-          .mindbodyStaffId;
-        let locationId: number | string | undefined = (practice as any)
+        // Get Mindbody configuration from EMR credential record
+        let staffId: number | string | undefined = (emr as any).mindbodyStaffId;
+        let locationId: number | string | undefined = (emr as any)
           .mindbodyLocationId;
-        let sessionTypeId: number | string | undefined = (practice as any)
+        let sessionTypeId: number | string | undefined = (emr as any)
           .mindbodySessionTypeId;
 
         // Use patient's amReferralId as the clientId for Mindbody booking

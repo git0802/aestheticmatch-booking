@@ -72,6 +72,10 @@ model EmrCredential {
   isValid            Boolean     @default(false) @map("is_valid")
   lastValidatedAt    DateTime?   @map("last_validated_at")
   validationError    String?     @map("validation_error") @db.Text
+  // Mindbody-specific configuration fields
+  mindbodyStaffId      String?  @map("mindbody_staff_id") @db.VarChar(50)
+  mindbodyLocationId   String?  @map("mindbody_location_id") @db.VarChar(50)
+  mindbodySessionTypeId String? @map("mindbody_session_type_id") @db.VarChar(50)
   createdAt          DateTime    @default(now()) @map("created_at")
   updatedAt          DateTime    @updatedAt @map("updated_at")
 
@@ -206,20 +210,16 @@ model Procedure {
 }
 
 model Practice {
-  id                   String   @id @default(uuid()) @db.Uuid
-  name                 String   @db.VarChar(255)
-  emrType              String?  @map("emr_type") @db.VarChar(50)
-  // Mindbody configuration for default booking parameters
-  mindbodyStaffId      String?  @map("mindbody_staff_id") @db.VarChar(50)
-  mindbodyLocationId   String?  @map("mindbody_location_id") @db.VarChar(50)
-  mindbodySessionTypeId String? @map("mindbody_session_type_id") @db.VarChar(50)
-  createdAt            DateTime @default(now()) @map("created_at")
-  createdBy            String   @map("created_by")
+  id               String   @id @default(uuid()) @db.Uuid
+  name             String   @db.VarChar(255)
+  emrType          String?  @map("emr_type") @db.VarChar(50)
+  createdAt        DateTime @default(now()) @map("created_at")
+  createdBy        String   @map("created_by")
 
   // Relations
-  createdByUser        User     @relation("PracticeCreatedBy", fields: [createdBy], references: [id])
-  appointments         Appointment[]
-  serviceFees          ServiceFee[]
+  createdByUser    User     @relation("PracticeCreatedBy", fields: [createdBy], references: [id])
+  appointments     Appointment[]
+  serviceFees      ServiceFee[]
 
   @@map("practices")
 }

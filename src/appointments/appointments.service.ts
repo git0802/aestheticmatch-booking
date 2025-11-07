@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -14,6 +15,7 @@ import type { User } from '../auth/interfaces/auth.interface';
 import { EncryptionService } from '../common/services/encryption.service';
 import { MindbodyService } from '../mindbody/mindbody.service';
 import { MindBodyClientService } from '../mindbody/mindbody-client.service';
+import { PracticesService } from '../practices/practices.service';
 
 @Injectable()
 export class AppointmentsService {
@@ -24,6 +26,7 @@ export class AppointmentsService {
     private encryption: EncryptionService,
     private mindbody: MindbodyService,
     private mindbodyClient: MindBodyClientService,
+    private practicesService: PracticesService,
   ) {}
 
   private hasAppointmentField(field: string): boolean {
@@ -52,6 +55,33 @@ export class AppointmentsService {
     });
     if (!practice) {
       throw new NotFoundException('Practice not found');
+    }
+
+    // Validate appointment time against practice availability schedules
+    const appointmentDate = new Date(createAppointmentDto.date);
+    const isAvailable = await this.practicesService.isTimeAvailable(
+      createAppointmentDto.practiceId,
+      appointmentDate,
+    );
+
+    if (!isAvailable) {
+      const dayNames = [
+        'Sunday',
+        'Monday',
+        'Tuesday',
+        'Wednesday',
+        'Thursday',
+        'Friday',
+        'Saturday',
+      ];
+      const dayOfWeek = dayNames[appointmentDate.getDay()];
+      const hours = String(appointmentDate.getHours()).padStart(2, '0');
+      const minutes = String(appointmentDate.getMinutes()).padStart(2, '0');
+      const timeStr = `${hours}:${minutes}`;
+
+      throw new BadRequestException(
+        `The selected time (${dayOfWeek} at ${timeStr}) is not available for this practice. Please check the practice's availability schedule and choose a time within their operating hours.`,
+      );
     }
 
     // Resolve service fields if serviceFeeId is provided
@@ -105,14 +135,26 @@ export class AppointmentsService {
         const context = await this.mindbodyClient.getPracticeContext(
           practice.id,
         );
-        const ensured = await this.mindbodyClient.ensureClientExists(
+        let ensured = await this.mindbodyClient.ensureClientExists(
           patient.id,
           practice.id,
           this.mindbody,
           context,
         );
 
-        const clientId = ensured.clientId || patient.amReferralId || undefined;
+        this.logger.log(
+          `ensureClientExists result for patient ${patient.id}: ${JSON.stringify(ensured)}`,
+        );
+
+        let clientId = ensured.clientId || patient.amReferralId || undefined;
+
+        if (!clientId) {
+          this.logger.warn(
+            `No clientId available for patient ${patient.id}. ensureClientExists returned: ${JSON.stringify(ensured)}`,
+          );
+        }
+
+        // Note: lack of clientId should not prevent calling bookAppointment; it can resolve/create on the fly.
 
         // Resolve missing booking params from Mindbody on-the-fly
         let staffId: number | string | undefined = context.staffId;
@@ -136,18 +178,18 @@ export class AppointmentsService {
           );
         }
 
-        const hasMindbodyConfig =
-          !!staffId && !!locationId && !!sessionTypeId && !!clientId;
+        const hasSchedulingParams =
+          !!staffId && !!locationId && !!sessionTypeId;
 
-        if (!hasMindbodyConfig) {
+        if (!hasSchedulingParams) {
           // Still incomplete after resolve attempt
           this.logger.warn(
             `Mindbody configuration could not be fully resolved for practice ${practice.id}. ` +
-              `Missing: ${!staffId ? 'staffId ' : ''}${!locationId ? 'locationId ' : ''}${!sessionTypeId ? 'sessionTypeId ' : ''}${!clientId ? 'clientId ' : ''}`,
+              `Missing: ${!staffId ? 'staffId ' : ''}${!locationId ? 'locationId ' : ''}${!sessionTypeId ? 'sessionTypeId ' : ''}`,
           );
           emrBookingResult = {
             success: false,
-            error: `Mindbody configuration incomplete. Please configure: ${!staffId ? 'Staff ID, ' : ''}${!locationId ? 'Location ID, ' : ''}${!sessionTypeId ? 'Session Type ID, ' : ''}${!clientId ? 'Patient Client ID' : ''}`,
+            error: `Mindbody configuration incomplete. Please configure: ${!staffId ? 'Staff ID, ' : ''}${!locationId ? 'Location ID, ' : ''}${!sessionTypeId ? 'Session Type ID' : ''}`,
           };
         } else {
           // Attempt booking
@@ -161,9 +203,9 @@ export class AppointmentsService {
               staffId,
               locationId,
               sessionTypeId,
-              clientId: String(clientId),
+              clientId: clientId ? String(clientId) : undefined,
               patient: {
-                name: patient.name ?? null,
+                name: `${patient.firstName} ${patient.lastName}`.trim() || null,
                 email: patient.email ?? null,
                 phone: patient.phone ?? null,
               },
@@ -175,6 +217,14 @@ export class AppointmentsService {
             `EMR booking result for patient ${patient.id}:`,
             JSON.stringify(bookingResult),
           );
+
+          if (bookingResult.clientId && !patient.amReferralId) {
+            // Persist newly discovered clientId even if booking fails
+            await this.prisma.patient.update({
+              where: { id: patient.id },
+              data: { amReferralId: bookingResult.clientId },
+            });
+          }
 
           if (bookingResult.success && bookingResult.appointmentId) {
             emrAppointmentId = bookingResult.appointmentId;
@@ -249,7 +299,8 @@ export class AppointmentsService {
         patient: {
           select: {
             id: true,
-            name: true,
+            firstName: true,
+            lastName: true,
             email: true,
             phone: true,
           },
@@ -315,10 +366,20 @@ export class AppointmentsService {
       where.OR = [
         {
           patient: {
-            name: {
-              contains: query.search,
-              mode: 'insensitive',
-            },
+            OR: [
+              {
+                firstName: {
+                  contains: query.search,
+                  mode: 'insensitive',
+                },
+              },
+              {
+                lastName: {
+                  contains: query.search,
+                  mode: 'insensitive',
+                },
+              },
+            ],
           },
         },
         {
@@ -342,7 +403,8 @@ export class AppointmentsService {
           patient: {
             select: {
               id: true,
-              name: true,
+              firstName: true,
+              lastName: true,
               email: true,
               phone: true,
             },
@@ -373,7 +435,8 @@ export class AppointmentsService {
         patient: {
           select: {
             id: true,
-            name: true,
+            firstName: true,
+            lastName: true,
             email: true,
             phone: true,
             createdBy: true,
@@ -421,7 +484,8 @@ export class AppointmentsService {
         patient: {
           select: {
             id: true,
-            name: true,
+            firstName: true,
+            lastName: true,
             email: true,
             phone: true,
           },
@@ -462,7 +526,8 @@ export class AppointmentsService {
         patient: {
           select: {
             id: true,
-            name: true,
+            firstName: true,
+            lastName: true,
             email: true,
             phone: true,
           },
@@ -488,7 +553,8 @@ export class AppointmentsService {
         patient: {
           select: {
             id: true,
-            name: true,
+            firstName: true,
+            lastName: true,
             email: true,
             phone: true,
             createdBy: true,
@@ -525,6 +591,37 @@ export class AppointmentsService {
       });
       if (!practice) {
         throw new NotFoundException('Practice not found');
+      }
+    }
+
+    // Validate appointment time against practice availability if date is being updated
+    if (updateAppointmentDto.date) {
+      const targetPracticeId =
+        updateAppointmentDto.practiceId || existingAppointment.practiceId;
+      const appointmentDate = new Date(updateAppointmentDto.date);
+      const isAvailable = await this.practicesService.isTimeAvailable(
+        targetPracticeId,
+        appointmentDate,
+      );
+
+      if (!isAvailable) {
+        const dayNames = [
+          'Sunday',
+          'Monday',
+          'Tuesday',
+          'Wednesday',
+          'Thursday',
+          'Friday',
+          'Saturday',
+        ];
+        const dayOfWeek = dayNames[appointmentDate.getDay()];
+        const hours = String(appointmentDate.getHours()).padStart(2, '0');
+        const minutes = String(appointmentDate.getMinutes()).padStart(2, '0');
+        const timeStr = `${hours}:${minutes}`;
+
+        throw new BadRequestException(
+          `The selected time (${dayOfWeek} at ${timeStr}) is not available for this practice. Please check the practice's availability schedule and choose a time within their operating hours.`,
+        );
       }
     }
 
@@ -678,7 +775,8 @@ export class AppointmentsService {
         patient: {
           select: {
             id: true,
-            name: true,
+            firstName: true,
+            lastName: true,
             email: true,
             phone: true,
           },
@@ -700,7 +798,8 @@ export class AppointmentsService {
         patient: {
           select: {
             id: true,
-            name: true,
+            firstName: true,
+            lastName: true,
             email: true,
             phone: true,
             createdBy: true,
@@ -745,7 +844,8 @@ export class AppointmentsService {
         patient: {
           select: {
             id: true,
-            name: true,
+            firstName: true,
+            lastName: true,
             email: true,
           },
         },
@@ -783,7 +883,10 @@ export class AppointmentsService {
       updated: result.count,
       appointments: expiredAppointments.map((apt) => ({
         id: apt.id,
-        patientName: apt.patient?.name,
+        patientName:
+          apt.patient?.firstName && apt.patient?.lastName
+            ? `${apt.patient.firstName} ${apt.patient.lastName}`
+            : null,
         practiceName: apt.practice?.name,
         date: apt.date,
         appointmentType: apt.appointmentType,

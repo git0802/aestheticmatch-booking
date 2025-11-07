@@ -6,7 +6,11 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ServiceFeeDto, EmrCredentialDto } from './create-practice.dto';
+import {
+  ServiceFeeDto,
+  EmrCredentialDto,
+  PracticeAvailabilityDto,
+} from './create-practice.dto';
 
 export class UpdatePracticeDto {
   @IsOptional()
@@ -24,6 +28,12 @@ export class UpdatePracticeDto {
   @ValidateNested({ each: true })
   @Type(() => ServiceFeeDto)
   serviceFees?: ServiceFeeDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PracticeAvailabilityDto)
+  availabilities?: PracticeAvailabilityDto[];
 
   @IsOptional()
   @IsString()

@@ -175,9 +175,40 @@ export class MindbodyService {
   }
 
   private buildClientPayload(client: MindBodyClientData): { Client: any } {
-    const payload: Record<string, unknown> = {
-      FirstName: client.firstName || 'Client',
-      LastName: client.lastName || 'Unknown',
+    // Trim and validate firstName and lastName - also remove any non-printable characters
+    const firstName = (client.firstName?.trim() || '').replace(
+      /[\u0000-\u001F\u007F-\u009F]/g,
+      '',
+    );
+    const lastName = (client.lastName?.trim() || '').replace(
+      /[\u0000-\u001F\u007F-\u009F]/g,
+      '',
+    );
+
+    // Log the raw values for debugging
+    this.logger.log(
+      `Building client payload with firstName: "${firstName}" (length: ${firstName.length}), lastName: "${lastName}" (length: ${lastName.length})`,
+    );
+    this.logger.log(
+      `Raw input - firstName: "${client.firstName}" (length: ${client.firstName?.length}), lastName: "${client.lastName}" (length: ${client.lastName?.length})`,
+    );
+
+    // Validate that we have actual names (not empty strings after trim)
+    if (!firstName || firstName.length === 0) {
+      throw new MindbodyApiError(
+        `Patient firstName is required but was empty. Raw value: "${client.firstName}"`,
+      );
+    }
+    if (!lastName || lastName.length === 0) {
+      throw new MindbodyApiError(
+        `Patient lastName is required but was empty. Raw value: "${client.lastName}"`,
+      );
+    }
+
+    // Build the client payload with required fields - ensure values are plain strings
+    const payload: any = {
+      FirstName: firstName,
+      LastName: lastName,
       SendAccountEmails: false,
       SendAccountTexts: false,
       SendScheduleEmails: false,
@@ -186,8 +217,11 @@ export class MindbodyService {
       SendPromotionalTexts: false,
     };
 
-    if (client.email) {
-      payload.Email = client.email;
+    // Add UniqueId if email is available (some Mindbody sandbox environments require this)
+    if (client.email?.trim()) {
+      const cleanEmail = client.email.trim();
+      payload.UniqueId = cleanEmail;
+      payload.Email = cleanEmail;
     }
 
     const normalizedPhone = this.normalizePhone(client.phone);
@@ -199,6 +233,11 @@ export class MindbodyService {
     if (birthDate) {
       payload.BirthDate = birthDate;
     }
+
+    this.logger.log(`Final payload keys: ${Object.keys(payload).join(', ')}`);
+    this.logger.log(
+      `Final payload values - FirstName: "${payload.FirstName}", LastName: "${payload.LastName}"`,
+    );
 
     return { Client: payload };
   }
@@ -235,22 +274,42 @@ export class MindbodyService {
     accessToken: string,
     client: MindBodyClientData,
   ): Promise<MindBodyClientResponse> {
+    const payload = this.buildClientPayload(client);
+    const requestBody = JSON.stringify(payload.Client);
+    this.logger.log(`Creating Mindbody client with payload: ${requestBody}`);
+    this.logger.log(
+      `Request headers: ${JSON.stringify(this.buildHeaders(apiKey, siteHeader, accessToken))}`,
+    );
+
     const response = await fetch(
       `${this.MINDBODY_API_BASE_URL}client/addclient`,
       {
         method: 'POST',
         headers: this.buildHeaders(apiKey, siteHeader, accessToken),
-        body: JSON.stringify(this.buildClientPayload(client)),
+        body: requestBody,
       },
     );
 
     if (!response.ok) {
-      const payload = await this.safeJson(response);
+      const errorPayload = await this.safeJson(response);
+      this.logger.error(
+        'Mindbody API error response:',
+        JSON.stringify(errorPayload, null, 2),
+      );
+      this.logger.error(
+        'Request payload was:',
+        JSON.stringify(payload, null, 2),
+      );
+      this.logger.error(
+        'Response status:',
+        response.status,
+        response.statusText,
+      );
       const message =
-        payload?.Error?.Message ||
-        payload?.Message ||
+        errorPayload?.Error?.Message ||
+        errorPayload?.Message ||
         `HTTP ${response.status}: ${response.statusText}`;
-      throw new MindbodyApiError(message, response.status, payload);
+      throw new MindbodyApiError(message, response.status, errorPayload);
     }
 
     const result = await this.safeJson(response);
@@ -491,7 +550,12 @@ export class MindbodyService {
         phone?: string | null;
       };
     },
-  ): Promise<{ success: boolean; appointmentId?: string; error?: string }> {
+  ): Promise<{
+    success: boolean;
+    appointmentId?: string;
+    error?: string;
+    clientId?: string; // client id used for booking if resolved/created
+  }> {
     try {
       const { accessToken, siteHeader } =
         await this.issueUserToken(credentials);
@@ -502,6 +566,7 @@ export class MindbodyService {
         !payload.locationId ||
         !payload.sessionTypeId
       ) {
+        // Attempt to resolve a client on the fly if missing
         if (!payload.clientId && payload.patient) {
           const resolvedClientId = await this.resolveOrCreateClient(
             credentials.apiKey,
@@ -514,22 +579,30 @@ export class MindbodyService {
           }
         }
 
+        // Check if all required parameters are present
         if (
           !payload.clientId ||
           !payload.staffId ||
           !payload.locationId ||
           !payload.sessionTypeId
         ) {
+          // Still missing scheduling parameters
+          const missingParams: string[] = [];
+          if (!payload.clientId) missingParams.push('clientId');
+          if (!payload.staffId) missingParams.push('staffId');
+          if (!payload.locationId) missingParams.push('locationId');
+          if (!payload.sessionTypeId) missingParams.push('sessionTypeId');
+
           return {
             success: false,
-            error:
-              'Mindbody booking requires clientId, staffId, locationId, and sessionTypeId. Provide these values in the request or configure defaults on the practice.',
+            error: `Mindbody booking requires all parameters. Missing: ${missingParams.join(', ')}. Provide these values in the request or configure defaults on the practice.`,
+            clientId: payload.clientId,
           };
         }
       }
 
       const bookingRes = await fetch(
-        `${this.MINDBODY_API_BASE_URL}appointments/appointments`,
+        `${this.MINDBODY_API_BASE_URL}appointment/addappointment`,
         {
           method: 'POST',
           headers: this.buildHeaders(
@@ -538,16 +611,14 @@ export class MindbodyService {
             accessToken,
           ),
           body: JSON.stringify({
-            Appointments: [
-              {
-                StartDateTime: payload.startDateTime,
-                LocationId: Number(payload.locationId),
-                StaffId: Number(payload.staffId),
-                ClientId: String(payload.clientId),
-                SessionTypeId: Number(payload.sessionTypeId),
-                Notes: payload.notes ?? undefined,
-              },
-            ],
+            StartDateTime: payload.startDateTime,
+            LocationId: Number(payload.locationId),
+            StaffId: Number(payload.staffId),
+            ClientId: payload.clientId ? String(payload.clientId) : undefined,
+            SessionTypeId: Number(payload.sessionTypeId),
+            Notes: payload.notes ?? undefined,
+            SendEmail: false,
+            Test: false,
           }),
         },
       );
@@ -558,19 +629,28 @@ export class MindbodyService {
           errorData?.Error?.Message ||
           errorData?.Message ||
           `HTTP ${bookingRes.status}: ${bookingRes.statusText}`;
-        return { success: false, error: `Mindbody booking failed: ${msg}` };
+        return {
+          success: false,
+          error: `Mindbody booking failed: ${msg}`,
+          clientId: payload.clientId,
+        };
       }
 
       const responseBody = await this.safeJson(bookingRes);
-      const appt = responseBody?.Appointments?.[0] || responseBody?.Appointment;
+      const appt = responseBody?.Appointment;
       const appointmentId = appt?.Id || appt?.AppointmentId || appt?.ID;
       if (!appointmentId) {
         return {
           success: false,
           error: 'Mindbody booking succeeded but no appointment ID returned',
+          clientId: payload.clientId,
         };
       }
-      return { success: true, appointmentId: String(appointmentId) };
+      return {
+        success: true,
+        appointmentId: String(appointmentId),
+        clientId: payload.clientId,
+      };
     } catch (error) {
       if (error instanceof MindbodyApiError) {
         return { success: false, error: error.message };
@@ -640,8 +720,8 @@ export class MindbodyService {
 
   private nameToParts(full: string): { firstName: string; lastName: string } {
     const parts = (full || '').trim().split(/\s+/).filter(Boolean);
-    if (parts.length === 0) return { firstName: '', lastName: '' };
-    if (parts.length === 1) return { firstName: parts[0], lastName: '' };
+    if (parts.length === 0) return { firstName: 'Client', lastName: 'Unknown' };
+    if (parts.length === 1) return { firstName: parts[0], lastName: 'Unknown' };
     return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
   }
 

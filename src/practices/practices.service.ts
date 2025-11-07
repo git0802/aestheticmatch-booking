@@ -32,6 +32,7 @@ export class PracticesService {
       name,
       emrCredential,
       serviceFees,
+      availabilities,
       mindbodyStaffId,
       mindbodyLocationId,
       mindbodySessionTypeId,
@@ -104,6 +105,17 @@ export class PracticesService {
               })),
             });
             console.log('Service fees created');
+          }
+
+          if (availabilities && availabilities.length > 0) {
+            await (tx as any).practiceAvailability.createMany({
+              data: availabilities.map((avail) => ({
+                practiceId: practice.id,
+                startDateTime: new Date(avail.startDateTime),
+                endDateTime: new Date(avail.endDateTime),
+              })),
+            });
+            console.log('Practice availabilities created');
           }
 
           return practice;
@@ -296,6 +308,7 @@ export class PracticesService {
             },
           },
           serviceFees: true,
+          availabilities: true,
         },
       });
 
@@ -628,6 +641,25 @@ export class PracticesService {
           }
         }
 
+        // Update practice availabilities
+        if (updatePracticeDto.availabilities !== undefined) {
+          // Delete all existing availabilities
+          await (tx as any).practiceAvailability.deleteMany({
+            where: { practiceId: id },
+          });
+
+          // Create new availabilities
+          if (updatePracticeDto.availabilities.length > 0) {
+            await (tx as any).practiceAvailability.createMany({
+              data: updatePracticeDto.availabilities.map((avail) => ({
+                practiceId: id,
+                startDateTime: new Date(avail.startDateTime),
+                endDateTime: new Date(avail.endDateTime),
+              })),
+            });
+          }
+        }
+
         return practice;
       });
 
@@ -697,5 +729,204 @@ export class PracticesService {
       }
       throw new BadRequestException('Failed to delete practice');
     }
+  }
+
+  // Practice Availability Management
+
+  async addAvailability(
+    practiceId: string,
+    availabilityData: {
+      startDateTime: string;
+      endDateTime: string;
+    },
+    user: User,
+  ) {
+    // Verify practice exists and user has access
+    const practice = await this.prisma.practice.findUnique({
+      where: { id: practiceId },
+    });
+
+    if (!practice) {
+      throw new NotFoundException('Practice not found');
+    }
+
+    // Role-based permissions
+    if (user.role === 'CONCIERGE' && practice.createdBy !== user.id) {
+      throw new ForbiddenException('You can only modify practices you created');
+    } else if (user.role && !['ADMIN', 'CONCIERGE'].includes(user.role)) {
+      throw new ForbiddenException(
+        'Only admin and concierge users can modify practices',
+      );
+    }
+
+    // Validate datetime logic
+    const startDateTime = new Date(availabilityData.startDateTime);
+    const endDateTime = new Date(availabilityData.endDateTime);
+
+    if (isNaN(startDateTime.getTime())) {
+      throw new BadRequestException('Invalid startDateTime format');
+    }
+    if (isNaN(endDateTime.getTime())) {
+      throw new BadRequestException('Invalid endDateTime format');
+    }
+    if (startDateTime >= endDateTime) {
+      throw new BadRequestException('startDateTime must be before endDateTime');
+    }
+
+    return (this.prisma as any).practiceAvailability.create({
+      data: {
+        practiceId,
+        startDateTime: startDateTime,
+        endDateTime: endDateTime,
+      },
+    });
+  }
+
+  async getAvailabilities(practiceId: string) {
+    const practice = await this.prisma.practice.findUnique({
+      where: { id: practiceId },
+    });
+
+    if (!practice) {
+      throw new NotFoundException('Practice not found');
+    }
+
+    return (this.prisma as any).practiceAvailability.findMany({
+      where: { practiceId },
+      orderBy: { startDateTime: 'asc' },
+    });
+  }
+
+  async updateAvailability(
+    practiceId: string,
+    availabilityId: string,
+    updateData: {
+      startDateTime?: string;
+      endDateTime?: string;
+    },
+    user: User,
+  ) {
+    const practice = await this.prisma.practice.findUnique({
+      where: { id: practiceId },
+    });
+
+    if (!practice) {
+      throw new NotFoundException('Practice not found');
+    }
+
+    // Role-based permissions
+    if (user.role === 'CONCIERGE' && practice.createdBy !== user.id) {
+      throw new ForbiddenException('You can only modify practices you created');
+    } else if (user.role && !['ADMIN', 'CONCIERGE'].includes(user.role)) {
+      throw new ForbiddenException(
+        'Only admin and concierge users can modify practices',
+      );
+    }
+
+    const availability = await (
+      this.prisma as any
+    ).practiceAvailability.findUnique({
+      where: { id: availabilityId },
+    });
+
+    if (!availability || availability.practiceId !== practiceId) {
+      throw new NotFoundException('Availability not found');
+    }
+
+    // Validate datetime logic if provided
+    const updateObject: any = {};
+
+    if (updateData.startDateTime) {
+      const startDateTime = new Date(updateData.startDateTime);
+      if (isNaN(startDateTime.getTime())) {
+        throw new BadRequestException('Invalid startDateTime format');
+      }
+      updateObject.startDateTime = startDateTime;
+    }
+
+    if (updateData.endDateTime) {
+      const endDateTime = new Date(updateData.endDateTime);
+      if (isNaN(endDateTime.getTime())) {
+        throw new BadRequestException('Invalid endDateTime format');
+      }
+      updateObject.endDateTime = endDateTime;
+    }
+
+    // Validate that start is before end
+    const finalStartDateTime =
+      updateObject.startDateTime || availability.startDateTime;
+    const finalEndDateTime =
+      updateObject.endDateTime || availability.endDateTime;
+    if (new Date(finalStartDateTime) >= new Date(finalEndDateTime)) {
+      throw new BadRequestException('startDateTime must be before endDateTime');
+    }
+
+    return (this.prisma as any).practiceAvailability.update({
+      where: { id: availabilityId },
+      data: updateObject,
+    });
+  }
+
+  async deleteAvailability(
+    practiceId: string,
+    availabilityId: string,
+    user: User,
+  ) {
+    const practice = await this.prisma.practice.findUnique({
+      where: { id: practiceId },
+    });
+
+    if (!practice) {
+      throw new NotFoundException('Practice not found');
+    }
+
+    // Role-based permissions
+    if (user.role === 'CONCIERGE' && practice.createdBy !== user.id) {
+      throw new ForbiddenException('You can only modify practices you created');
+    } else if (user.role && !['ADMIN', 'CONCIERGE'].includes(user.role)) {
+      throw new ForbiddenException(
+        'Only admin and concierge users can modify practices',
+      );
+    }
+
+    const availability = await (
+      this.prisma as any
+    ).practiceAvailability.findUnique({
+      where: { id: availabilityId },
+    });
+
+    if (!availability || availability.practiceId !== practiceId) {
+      throw new NotFoundException('Availability not found');
+    }
+
+    await (this.prisma as any).practiceAvailability.delete({
+      where: { id: availabilityId },
+    });
+
+    return { success: true };
+  }
+
+  async isTimeAvailable(
+    practiceId: string,
+    appointmentDate: Date,
+  ): Promise<boolean> {
+    const availabilities = await (
+      this.prisma as any
+    ).practiceAvailability.findMany({
+      where: { practiceId },
+    });
+
+    // If no availabilities are set, allow all times (backward compatibility)
+    if (availabilities.length === 0) {
+      return true;
+    }
+
+    // Check if appointment time falls within any availability window
+    return availabilities.some((availability: any) => {
+      const startDateTime = new Date(availability.startDateTime);
+      const endDateTime = new Date(availability.endDateTime);
+
+      return appointmentDate >= startDateTime && appointmentDate <= endDateTime;
+    });
   }
 }

@@ -8,6 +8,7 @@ import {
   ValidateNested,
   IsNumber,
   Min,
+  Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { EmrProvider } from '@prisma/client';
@@ -30,6 +31,16 @@ export class ServiceFeeDto {
   @IsNumber()
   @Min(0)
   price: number;
+}
+
+export class PracticeAvailabilityDto {
+  @IsString()
+  @IsNotEmpty()
+  startDateTime: string; // ISO 8601 datetime string
+
+  @IsString()
+  @IsNotEmpty()
+  endDateTime: string; // ISO 8601 datetime string
 }
 
 export class EmrCredentialDto {
@@ -104,4 +115,10 @@ export class CreatePracticeDto {
   @IsString()
   @MaxLength(50)
   mindbodySessionTypeId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PracticeAvailabilityDto)
+  availabilities?: PracticeAvailabilityDto[];
 }

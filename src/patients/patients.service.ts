@@ -33,7 +33,8 @@ export class PatientsService {
 
       // Build the create data object using proper Prisma types
       const createData: any = {
-        name: createPatientDto.name,
+        firstName: createPatientDto.firstName,
+        lastName: createPatientDto.lastName,
         email: createPatientDto.email,
         phone: createPatientDto.phone,
         gender: createPatientDto.gender,
@@ -226,8 +227,11 @@ export class PatientsService {
     try {
       // Build the update data object without the nested fields
       const updateData: any = {
-        ...(updatePatientDto.name !== undefined && {
-          name: updatePatientDto.name,
+        ...(updatePatientDto.firstName !== undefined && {
+          firstName: updatePatientDto.firstName,
+        }),
+        ...(updatePatientDto.lastName !== undefined && {
+          lastName: updatePatientDto.lastName,
         }),
         ...(updatePatientDto.email !== undefined && {
           email: updatePatientDto.email,
@@ -365,7 +369,8 @@ export class PatientsService {
   private formatPatientResponse(patient: any): PatientResponseDto {
     return {
       id: patient.id,
-      name: patient.name,
+      firstName: patient.firstName,
+      lastName: patient.lastName,
       dob: patient.dob,
       email: patient.email,
       phone: patient.phone,

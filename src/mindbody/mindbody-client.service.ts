@@ -18,10 +18,13 @@ interface MindbodyPracticeContext {
 interface EnsureClientResult {
   clientId: string | null;
   patient: {
-    name: string;
+    firstName: string;
+    lastName: string;
     email: string;
     phone: string | null;
   };
+  created?: boolean; // indicates if we created the client this call
+  error?: string; // propagate creation error reason
 }
 
 @Injectable()
@@ -96,7 +99,8 @@ export class MindBodyClientService {
       where: { id: patientId },
       select: {
         id: true,
-        name: true,
+        firstName: true,
+        lastName: true,
         email: true,
         phone: true,
         dob: true,
@@ -113,42 +117,98 @@ export class MindBodyClientService {
 
     // If patient doesn't have a MindBody client ID, create one
     if (!clientId) {
+      const context =
+        contextOverride ?? (await this.getPracticeContext(practiceId));
       try {
-        const context =
-          contextOverride ?? (await this.getPracticeContext(practiceId));
+        // Trim names to avoid whitespace issues
+        const firstName = (patient.firstName || 'Client').trim();
+        const lastName = (patient.lastName || 'Unknown').trim();
+
+        // Primary attempt using patient data
+        this.logger.log(
+          `Attempting to create Mindbody client for patient ${patient.id} with firstName: ${firstName}, lastName: ${lastName}`,
+        );
         const mindbodyClient = await mindbodyService.addClient({
           credentials: context.credentials,
           client: {
-            firstName: patient.name.split(' ')[0] || patient.name,
-            lastName: patient.name.split(' ').slice(1).join(' ') || '',
+            firstName,
+            lastName,
             email: patient.email,
             phone: patient.phone || '',
             dateOfBirth: patient.dob ?? undefined,
           },
         });
-
+        this.logger.log(
+          `addClient returned: ${JSON.stringify(mindbodyClient)}`,
+        );
         clientId = mindbodyClient?.id ?? null;
 
-        // Update patient with the new MindBody client ID
+        if (!clientId) {
+          // Fallback attempt with minimal payload (no email/phone in case formatting caused failure)
+          const fallbackClient = await mindbodyService.addClient({
+            credentials: context.credentials,
+            client: {
+              firstName,
+              lastName,
+              email: '',
+              phone: '',
+            },
+          });
+          clientId = fallbackClient?.id ?? null;
+        }
+
         if (clientId) {
           await this.prisma.patient.update({
             where: { id: patient.id },
             data: { amReferralId: clientId },
           });
-
           this.logger.log(
             `Created Mindbody client for patient ${patient.id}: ${clientId}`,
           );
+          return {
+            clientId,
+            patient: {
+              firstName,
+              lastName,
+              email: patient.email,
+              phone: patient.phone || null,
+            },
+            created: true,
+          };
+        } else {
+          return {
+            clientId: null,
+            patient: {
+              firstName,
+              lastName,
+              email: patient.email,
+              phone: patient.phone || null,
+            },
+            error:
+              'Mindbody did not return a client ID after creation attempts',
+          };
         }
       } catch (error) {
-        this.logger.error('Failed to create Mindbody client', error);
+        this.logger.error(
+          `Failed to create Mindbody client for patient ${patient.id}:`,
+          error,
+        );
+        this.logger.error('Error details:', {
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        });
         return {
           clientId: null,
           patient: {
-            name: patient.name,
+            firstName: (patient.firstName || 'Client').trim(),
+            lastName: (patient.lastName || 'Unknown').trim(),
             email: patient.email,
             phone: patient.phone || null,
           },
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Unknown error creating client',
         };
       }
     }
@@ -156,10 +216,12 @@ export class MindBodyClientService {
     return {
       clientId,
       patient: {
-        name: patient.name,
+        firstName: (patient.firstName || 'Client').trim(),
+        lastName: (patient.lastName || 'Unknown').trim(),
         email: patient.email,
         phone: patient.phone || null,
       },
+      created: false,
     };
   }
 }

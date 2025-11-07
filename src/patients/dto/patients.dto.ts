@@ -180,12 +180,23 @@ export enum PatientGender {
 export class CreatePatientDto {
   @IsString()
   @IsNotEmpty()
-  @MinLength(2, { message: 'Name must be at least 2 characters long' })
-  @MaxLength(255)
+  @MinLength(1, { message: 'First name must be at least 1 character long' })
+  @MaxLength(100)
   @Matches(/^[a-zA-Z\s'-]+$/, {
-    message: 'Name can only contain letters, spaces, hyphens, and apostrophes',
+    message:
+      'First name can only contain letters, spaces, hyphens, and apostrophes',
   })
-  name: string;
+  firstName: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(1, { message: 'Last name must be at least 1 character long' })
+  @MaxLength(155)
+  @Matches(/^[a-zA-Z\s'-]+$/, {
+    message:
+      'Last name can only contain letters, spaces, hyphens, and apostrophes',
+  })
+  lastName: string;
 
   @IsDateString()
   @Validate(IsAdultConstraint)
@@ -264,12 +275,23 @@ export class CreatePatientDto {
 export class UpdatePatientDto {
   @IsOptional()
   @IsString()
-  @MinLength(2, { message: 'Name must be at least 2 characters long' })
-  @MaxLength(255)
+  @MinLength(1, { message: 'First name must be at least 1 character long' })
+  @MaxLength(100)
   @Matches(/^[a-zA-Z\s'-]+$/, {
-    message: 'Name can only contain letters, spaces, hyphens, and apostrophes',
+    message:
+      'First name can only contain letters, spaces, hyphens, and apostrophes',
   })
-  name?: string;
+  firstName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1, { message: 'Last name must be at least 1 character long' })
+  @MaxLength(155)
+  @Matches(/^[a-zA-Z\s'-]+$/, {
+    message:
+      'Last name can only contain letters, spaces, hyphens, and apostrophes',
+  })
+  lastName?: string;
 
   @IsOptional()
   @IsDateString()
@@ -359,7 +381,8 @@ export class CreatorUserDto {
 
 export class PatientResponseDto {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   dob: Date;
   email: string;
   phone?: string;

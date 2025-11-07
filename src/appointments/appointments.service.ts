@@ -205,9 +205,11 @@ export class AppointmentsService {
               sessionTypeId,
               clientId: clientId ? String(clientId) : undefined,
               patient: {
-                name: `${patient.firstName} ${patient.lastName}`.trim() || null,
+                firstName: patient.firstName || 'Client',
+                lastName: patient.lastName || 'Unknown',
                 email: patient.email ?? null,
                 phone: patient.phone ?? null,
+                dateOfBirth: patient.dob ?? null,
               },
             },
           );
@@ -220,6 +222,15 @@ export class AppointmentsService {
 
           if (bookingResult.clientId && !patient.amReferralId) {
             // Persist newly discovered clientId even if booking fails
+            await this.prisma.patient.update({
+              where: { id: patient.id },
+              data: { amReferralId: bookingResult.clientId },
+            });
+          } else if (bookingResult.clientId && patient.amReferralId && bookingResult.clientId !== patient.amReferralId) {
+            // Update patient with new client ID if it changed (e.g., old one was invalid)
+            this.logger.log(
+              `Updating patient ${patient.id} clientId from ${patient.amReferralId} to ${bookingResult.clientId}`,
+            );
             await this.prisma.patient.update({
               where: { id: patient.id },
               data: { amReferralId: bookingResult.clientId },

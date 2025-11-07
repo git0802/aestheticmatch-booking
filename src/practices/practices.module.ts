@@ -4,8 +4,10 @@ import { PracticesController } from './practices.controller';
 import { PrismaService } from '../prisma/prisma.service';
 import { EncryptionService } from '../common/services/encryption.service';
 import { MindbodyValidationService } from '../common/services/mindbody-validation.service';
+import { MindbodyModule } from '../mindbody/mindbody.module';
 
 @Module({
+  imports: [MindbodyModule],
   controllers: [PracticesController],
   providers: [
     PracticesService,

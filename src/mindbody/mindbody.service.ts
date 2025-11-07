@@ -545,9 +545,11 @@ export class MindbodyService {
       sessionTypeId?: string | number;
       clientId?: string;
       patient?: {
-        name?: string | null;
+        firstName?: string | null;
+        lastName?: string | null;
         email?: string | null;
         phone?: string | null;
+        dateOfBirth?: Date | null;
       };
     },
   ): Promise<{
@@ -629,6 +631,93 @@ export class MindbodyService {
           errorData?.Error?.Message ||
           errorData?.Message ||
           `HTTP ${bookingRes.status}: ${bookingRes.statusText}`;
+        
+        // Check if error is due to invalid/inactive client ID
+        const isClientError = msg && (
+          msg.includes('inactive') ||
+          msg.includes('does not exist') ||
+          msg.includes('Custom ID')
+        );
+
+        // If client ID is invalid/inactive and we have patient info, try to create a new client
+        if (isClientError && payload.patient && payload.clientId) {
+          this.logger.warn(
+            `Client ID ${payload.clientId} is invalid/inactive in Mindbody. Attempting to create new client.`,
+          );
+          
+          const newClientId = await this.resolveOrCreateClient(
+            credentials.apiKey,
+            siteHeader,
+            accessToken,
+            payload.patient,
+          );
+
+          if (newClientId && newClientId !== payload.clientId) {
+            this.logger.log(`Created new client ID: ${newClientId}. Retrying booking.`);
+            
+            // Retry booking with new client ID
+            const retryRes = await fetch(
+              `${this.MINDBODY_API_BASE_URL}appointment/addappointment`,
+              {
+                method: 'POST',
+                headers: this.buildHeaders(
+                  credentials.apiKey,
+                  siteHeader,
+                  accessToken,
+                ),
+                body: JSON.stringify({
+                  StartDateTime: payload.startDateTime,
+                  LocationId: Number(payload.locationId),
+                  StaffId: Number(payload.staffId),
+                  ClientId: String(newClientId),
+                  SessionTypeId: Number(payload.sessionTypeId),
+                  Notes: payload.notes ?? undefined,
+                  SendEmail: false,
+                  Test: false,
+                }),
+              },
+            );
+
+            if (retryRes.ok) {
+              const retryBody = await this.safeJson(retryRes);
+              const appt = retryBody?.Appointment;
+              const appointmentId = appt?.Id || appt?.AppointmentId || appt?.ID;
+              if (appointmentId) {
+                return {
+                  success: true,
+                  appointmentId: String(appointmentId),
+                  clientId: newClientId,
+                };
+              } else {
+                return {
+                  success: false,
+                  error: 'Mindbody booking succeeded but no appointment ID returned',
+                  clientId: newClientId,
+                };
+              }
+            } else {
+              // Retry also failed, get error from retry response
+              const retryErrorData = await this.safeJson(retryRes);
+              const retryMsg =
+                retryErrorData?.Error?.Message ||
+                retryErrorData?.Message ||
+                `HTTP ${retryRes.status}: ${retryRes.statusText}`;
+              return {
+                success: false,
+                error: `Mindbody booking failed after client recreation: ${retryMsg}`,
+                clientId: newClientId,
+              };
+            }
+          } else {
+            // Failed to create new client
+            return {
+              success: false,
+              error: `Failed to create new Mindbody client. Original error: ${msg}`,
+              clientId: payload.clientId,
+            };
+          }
+        }
+
         return {
           success: false,
           error: `Mindbody booking failed: ${msg}`,
@@ -667,9 +756,11 @@ export class MindbodyService {
     siteHeader: string,
     accessToken: string,
     patient: {
-      name?: string | null;
+      firstName?: string | null;
+      lastName?: string | null;
       email?: string | null;
       phone?: string | null;
+      dateOfBirth?: Date | null;
     },
   ): Promise<string | null> {
     try {
@@ -699,16 +790,18 @@ export class MindbodyService {
         }
       }
 
-      const { firstName, lastName } = this.nameToParts(patient.name || '');
+      const firstName = patient.firstName || 'Client';
+      const lastName = patient.lastName || 'Unknown';
       const created = await this.createClientWithToken(
         apiKey,
         siteHeader,
         accessToken,
         {
-          firstName: firstName || 'Client',
-          lastName: lastName || 'Unknown',
+          firstName,
+          lastName,
           email: patient.email || '',
           phone: patient.phone || '',
+          dateOfBirth: patient.dateOfBirth ?? undefined,
         },
       );
       return created?.id ?? null;
@@ -780,6 +873,130 @@ export class MindbodyService {
       throw error instanceof Error
         ? error
         : new Error('Unknown error occurred while creating Mindbody client');
+    }
+  }
+
+  /**
+   * Add staff availability schedules to Mindbody
+   * Based on: https://developers.mindbodyonline.com/ui/documentation/public-api#/http/api-endpoints/appointment/add-availabilities
+   */
+  async addAvailabilities(
+    credentials: MindbodyAuthCredentials,
+    availabilities: Array<{
+      staffId: number;
+      locationId: number;
+      startDateTime: string; // ISO format
+      endDateTime: string; // ISO format
+      displayName?: string;
+      sessionTypeIds?: number[];
+    }>,
+  ): Promise<{
+    success: boolean;
+    error?: string;
+    availabilities?: any[];
+  }> {
+    try {
+      const { accessToken, siteHeader } =
+        await this.issueUserToken(credentials);
+
+      const response = await fetch(
+        `${this.MINDBODY_API_BASE_URL}appointment/addavailabilities`,
+        {
+          method: 'POST',
+          headers: this.buildHeaders(
+            credentials.apiKey,
+            siteHeader,
+            accessToken,
+          ),
+          body: JSON.stringify({
+            Availabilities: availabilities.map((avail) => ({
+              StaffId: avail.staffId,
+              LocationId: avail.locationId,
+              StartDateTime: avail.startDateTime,
+              EndDateTime: avail.endDateTime,
+              DisplayName: avail.displayName || 'Available',
+              SessionTypeIds: avail.sessionTypeIds || [],
+            })),
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await this.safeJson(response);
+        const msg =
+          errorData?.Error?.Message ||
+          errorData?.Message ||
+          `HTTP ${response.status}: ${response.statusText}`;
+        
+        this.logger.error(`Failed to add Mindbody availabilities: ${msg}`);
+        return {
+          success: false,
+          error: `Failed to add availabilities to Mindbody: ${msg}`,
+        };
+      }
+
+      const responseBody = await this.safeJson(response);
+      this.logger.log(
+        `Successfully added ${availabilities.length} availability schedules to Mindbody`,
+      );
+
+      return {
+        success: true,
+        availabilities: responseBody?.Availabilities || [],
+      };
+    } catch (error) {
+      this.logger.error('Error adding Mindbody availabilities:', error);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred';
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Delete staff availability from Mindbody
+   */
+  async deleteAvailability(
+    credentials: MindbodyAuthCredentials,
+    availabilityId: number,
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { accessToken, siteHeader } =
+        await this.issueUserToken(credentials);
+
+      const response = await fetch(
+        `${this.MINDBODY_API_BASE_URL}appointment/deleteavailability`,
+        {
+          method: 'DELETE',
+          headers: this.buildHeaders(
+            credentials.apiKey,
+            siteHeader,
+            accessToken,
+          ),
+          body: JSON.stringify({
+            AvailabilityId: availabilityId,
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await this.safeJson(response);
+        const msg =
+          errorData?.Error?.Message ||
+          errorData?.Message ||
+          `HTTP ${response.status}: ${response.statusText}`;
+        
+        return {
+          success: false,
+          error: `Failed to delete availability from Mindbody: ${msg}`,
+        };
+      }
+
+      return { success: true };
+    } catch (error) {
+      this.logger.error('Error deleting Mindbody availability:', error);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred';
+      return { success: false, error: errorMessage };
     }
   }
 }

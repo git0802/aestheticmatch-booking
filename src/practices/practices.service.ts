@@ -3,21 +3,26 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePracticeDto } from './dto/create-practice.dto';
 import { UpdatePracticeDto } from './dto/update-practice.dto';
 import { EncryptionService } from '../common/services/encryption.service';
 import { MindbodyValidationService } from '../common/services/mindbody-validation.service';
+import { MindbodyService } from '../mindbody/mindbody.service';
 import { Prisma, EmrProvider } from '@prisma/client';
 import type { User } from '../auth/interfaces/auth.interface';
 
 @Injectable()
 export class PracticesService {
+  private readonly logger = new Logger(PracticesService.name);
+
   constructor(
     private prisma: PrismaService,
     private encryptionService: EncryptionService,
     private mindbodyValidationService: MindbodyValidationService,
+    private mindbodyService: MindbodyService,
   ) {}
 
   async create(createPracticeDto: CreatePracticeDto, user: User) {
@@ -126,6 +131,54 @@ export class PracticesService {
           timeout: 20000, // ms before aborting the interactive transaction
         },
       );
+
+      // Sync availabilities to Mindbody AFTER database transaction completes
+      if (
+        emrCredential?.provider === EmrProvider.MINDBODY &&
+        validatedEmrCredential &&
+        availabilities &&
+        availabilities.length > 0 &&
+        mindbodyStaffId &&
+        mindbodyLocationId
+      ) {
+        try {
+          const credentials = this.encryptionService.decryptEmrData(
+            validatedEmrCredential.encryptedData,
+          );
+
+          const mindbodyAvailabilities = availabilities.map((avail) => ({
+            staffId: Number(mindbodyStaffId),
+            locationId: Number(mindbodyLocationId),
+            startDateTime: new Date(avail.startDateTime).toISOString(),
+            endDateTime: new Date(avail.endDateTime).toISOString(),
+            displayName: 'Available for Booking',
+            sessionTypeIds: mindbodySessionTypeId
+              ? [Number(mindbodySessionTypeId)]
+              : [],
+          }));
+
+          const result = await this.mindbodyService.addAvailabilities(
+            credentials,
+            mindbodyAvailabilities,
+          );
+
+          if (result.success) {
+            this.logger.log(
+              `Successfully synced ${availabilities.length} availability schedules to Mindbody for practice ${createdPractice.id}`,
+            );
+          } else {
+            this.logger.warn(
+              `Failed to sync availabilities to Mindbody: ${result.error}. ` +
+                `Availabilities saved locally but not in Mindbody.`,
+            );
+          }
+        } catch (error) {
+          this.logger.error(
+            `Error syncing availabilities to Mindbody for practice ${createdPractice.id}:`,
+            error,
+          );
+        }
+      }
 
       // Fetch with related data OUTSIDE the transaction for minimal lock time
       const result = await this.prisma.practice.findUnique({
@@ -508,27 +561,28 @@ export class PracticesService {
         }
       }
 
-      const result = await this.prisma.$transaction(async (tx) => {
-        const practice = await tx.practice.update({
-          where: { id },
-          data: {
-            ...(updatePracticeDto.name && { name: updatePracticeDto.name }),
-            ...(updatePracticeDto.emrType !== undefined
-              ? { emrType: updatePracticeDto.emrType }
-              : validatedEmrCredential
-                ? { emrType: validatedEmrCredential.provider }
-                : {}),
-          },
-          include: {
-            createdByUser: {
-              select: {
-                firstName: true,
-                lastName: true,
-                email: true,
+      const result = await this.prisma.$transaction(
+        async (tx) => {
+          const practice = await tx.practice.update({
+            where: { id },
+            data: {
+              ...(updatePracticeDto.name && { name: updatePracticeDto.name }),
+              ...(updatePracticeDto.emrType !== undefined
+                ? { emrType: updatePracticeDto.emrType }
+                : validatedEmrCredential
+                  ? { emrType: validatedEmrCredential.provider }
+                  : {}),
+            },
+            include: {
+              createdByUser: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                },
               },
             },
-          },
-        });
+          });
 
         if (validatedEmrCredential) {
           const existingCredential = await (tx as any).emrCredential.findFirst({
@@ -661,7 +715,85 @@ export class PracticesService {
         }
 
         return practice;
-      });
+      },
+      {
+        maxWait: 10000, // 10 seconds max wait time
+        timeout: 15000, // 15 seconds timeout
+      },
+      );
+
+      // Sync availabilities to Mindbody AFTER database transaction completes
+      if (
+        result.emrType === EmrProvider.MINDBODY &&
+        updatePracticeDto.availabilities !== undefined
+      ) {
+        try {
+          // Get the EMR credential
+          const emrCred = await (this.prisma as any).emrCredential.findFirst({
+            where: { ownerId: id, ownerType: 'PRACTICE' },
+            orderBy: { createdAt: 'desc' },
+          });
+
+          if (emrCred?.encryptedData) {
+            const credentials = this.encryptionService.decryptEmrData(
+              emrCred.encryptedData,
+            );
+
+            const staffId =
+              updatePracticeDto.mindbodyStaffId ??
+              emrCred.mindbodyStaffId;
+            const locationId =
+              updatePracticeDto.mindbodyLocationId ??
+              emrCred.mindbodyLocationId;
+            const sessionTypeId =
+              updatePracticeDto.mindbodySessionTypeId ??
+              emrCred.mindbodySessionTypeId;
+
+            if (
+              staffId &&
+              locationId &&
+              updatePracticeDto.availabilities.length > 0
+            ) {
+              const mindbodyAvailabilities =
+                updatePracticeDto.availabilities.map((avail) => ({
+                  staffId: Number(staffId),
+                  locationId: Number(locationId),
+                  startDateTime: new Date(avail.startDateTime).toISOString(),
+                  endDateTime: new Date(avail.endDateTime).toISOString(),
+                  displayName: 'Available for Booking',
+                  sessionTypeIds: sessionTypeId
+                    ? [Number(sessionTypeId)]
+                    : [],
+                }));
+
+              const syncResult = await this.mindbodyService.addAvailabilities(
+                credentials,
+                mindbodyAvailabilities,
+              );
+
+              if (syncResult.success) {
+                this.logger.log(
+                  `Successfully synced ${updatePracticeDto.availabilities.length} availability schedules to Mindbody for practice ${id}`,
+                );
+              } else {
+                this.logger.warn(
+                  `Failed to sync availabilities to Mindbody: ${syncResult.error}. ` +
+                    `Availabilities saved locally but not in Mindbody.`,
+                );
+              }
+            } else {
+              this.logger.warn(
+                `Cannot sync availabilities to Mindbody: Missing staffId or locationId for practice ${id}`,
+              );
+            }
+          }
+        } catch (error) {
+          this.logger.error(
+            `Error syncing availabilities to Mindbody for practice ${id}:`,
+            error,
+          );
+        }
+      }
 
       return result;
     } catch (error) {

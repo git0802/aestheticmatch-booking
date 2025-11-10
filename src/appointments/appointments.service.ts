@@ -15,6 +15,8 @@ import type { User } from '../auth/interfaces/auth.interface';
 import { EncryptionService } from '../common/services/encryption.service';
 import { MindbodyService } from '../mindbody/mindbody.service';
 import { MindBodyClientService } from '../mindbody/mindbody-client.service';
+import { NextechService } from '../nextech/nextech.service';
+import { NextechClientService } from '../nextech/nextech-client.service';
 import { PracticesService } from '../practices/practices.service';
 
 @Injectable()
@@ -26,6 +28,8 @@ export class AppointmentsService {
     private encryption: EncryptionService,
     private mindbody: MindbodyService,
     private mindbodyClient: MindBodyClientService,
+    private nextech: NextechService,
+    private nextechClient: NextechClientService,
     private practicesService: PracticesService,
   ) {}
 
@@ -285,6 +289,170 @@ export class AppointmentsService {
         err instanceof Error ? err.message : 'Unknown error occurred';
       // Re-throw the error to prevent appointment creation
       throw new Error(`Failed to book appointment in Mindbody: ${errorMsg}`);
+    }
+
+    // Attempt EMR booking for Nextech if not already booked in Mindbody
+    if (!emrAppointmentId) {
+      try {
+        const nextechEmr = await (this.prisma as any).emrCredential.findFirst({
+          where: {
+            ownerId: practice.id,
+            ownerType: 'PRACTICE',
+            provider: 'NEXTECH',
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        if (nextechEmr?.encryptedData) {
+          // Pull Nextech context
+          const context = await this.nextechClient.getPracticeContext(
+            practice.id,
+          );
+
+          // Ensure patient exists in Nextech
+          let nextechPatientId = (patient as any).nextechPatientId;
+          
+          if (!nextechPatientId) {
+            const clientResponse = await this.nextechClient.ensureClientExists(
+              practice.id,
+              {
+                firstName: patient.firstName || 'Patient',
+                lastName: patient.lastName || 'Unknown',
+                email: patient.email || '',
+                phone: patient.phone || '',
+                dateOfBirth: patient.dob || undefined,
+              },
+            );
+
+            if (clientResponse) {
+              nextechPatientId = clientResponse.nextechId;
+              // Update patient with Nextech patient ID
+              await this.prisma.patient.update({
+                where: { id: patient.id },
+                data: { nextechPatientId },
+              });
+            }
+          }
+
+          this.logger.log(
+            `Nextech patient ID for ${patient.id}: ${nextechPatientId}`,
+          );
+
+          // Resolve missing booking params from Nextech on-the-fly
+          let providerId: number | string | undefined = context.nextechProviderId;
+          let locationId: number | string | undefined = context.nextechLocationId;
+          let appointmentTypeId: number | string | undefined = context.nextechAppointmentTypeId;
+
+          if (!providerId || !locationId || !appointmentTypeId) {
+            const credentials = await this.nextechClient.getCredentials(practice.id);
+            const resolved = await this.nextech.resolveBookingParams({
+              credentials,
+              desiredStartDateTime: new Date(
+                createAppointmentDto.date,
+              ).toISOString(),
+            });
+            providerId = providerId ?? resolved.providerId;
+            locationId = locationId ?? resolved.locationId;
+            appointmentTypeId = appointmentTypeId ?? resolved.appointmentTypeId;
+
+            this.logger.log(
+              `Resolved Nextech params for practice ${practice.id}: ` +
+                `providerId=${providerId}, locationId=${locationId}, appointmentTypeId=${appointmentTypeId}`,
+            );
+          }
+
+          const hasSchedulingParams =
+            !!providerId && !!locationId && !!appointmentTypeId;
+
+          if (!hasSchedulingParams) {
+            this.logger.warn(
+              `Nextech configuration could not be fully resolved for practice ${practice.id}. ` +
+                `Missing: ${!providerId ? 'providerId ' : ''}${!locationId ? 'locationId ' : ''}${!appointmentTypeId ? 'appointmentTypeId ' : ''}`,
+            );
+            emrBookingResult = {
+              success: false,
+              error: `Nextech configuration incomplete. Please configure: ${!providerId ? 'Provider ID, ' : ''}${!locationId ? 'Location ID, ' : ''}${!appointmentTypeId ? 'Appointment Type ID' : ''}`,
+            };
+          } else {
+            this.logger.log(
+              `Attempting Nextech booking with params: ` +
+                `providerId=${providerId}, locationId=${locationId}, appointmentTypeId=${appointmentTypeId}, patientId=${nextechPatientId}`,
+            );
+
+            const appointmentDate = new Date(createAppointmentDto.date);
+            const credentials = await this.nextechClient.getCredentials(practice.id);
+
+            const bookingResult = await this.nextech.bookAppointment(
+              credentials,
+              {
+                startDateTime: appointmentDate.toISOString(),
+                notes: `AestheticMatch booking for patient ${patient.id}`,
+                providerId,
+                locationId,
+                appointmentTypeId,
+                patientId: nextechPatientId ? String(nextechPatientId) : undefined,
+                patient: {
+                  firstName: patient.firstName || 'Patient',
+                  lastName: patient.lastName || 'Unknown',
+                  email: patient.email ?? null,
+                  phone: patient.phone ?? null,
+                  dateOfBirth: patient.dob ?? null,
+                },
+              },
+            );
+
+            emrBookingResult = bookingResult;
+            this.logger.log(
+              `Nextech booking result for patient ${patient.id}:`,
+              JSON.stringify(bookingResult),
+            );
+
+            if (bookingResult.patientId && !nextechPatientId) {
+              await this.prisma.patient.update({
+                where: { id: patient.id },
+                data: { nextechPatientId: bookingResult.patientId },
+              });
+            }
+
+            if (bookingResult.success && bookingResult.appointmentId) {
+              emrAppointmentId = bookingResult.appointmentId;
+              this.logger.log(
+                `Nextech booking successful with appointment ID: ${emrAppointmentId}`,
+              );
+            } else if (!bookingResult.success) {
+              const errorMsg =
+                bookingResult.error || 'Unknown error during Nextech booking';
+              this.logger.error(
+                `Nextech booking failed for patient ${patient.id}: ${errorMsg}`,
+              );
+
+              let enhancedError = errorMsg;
+              if (errorMsg.includes('not available')) {
+                enhancedError = `${errorMsg}\n\nThis usually means:\n` +
+                  `1. Provider availability has not been set up in Nextech for this time slot\n` +
+                  `2. The provider (ID: ${providerId}) is not available at ${appointmentDate.toISOString()}\n\n` +
+                  `Please verify that provider availability has been added in Nextech for:\n` +
+                  `- Provider ID: ${providerId}\n` +
+                  `- Location ID: ${locationId}\n` +
+                  `- Date/Time: ${appointmentDate.toISOString()}`;
+              }
+
+              throw new Error(
+                `Failed to book appointment in Nextech: ${enhancedError}`,
+              );
+            }
+          }
+        } else {
+          this.logger.log(
+            `No Nextech credentials found for practice ${practice.id}`,
+          );
+        }
+      } catch (err) {
+        this.logger.error('Nextech booking error', err);
+        const errorMsg =
+          err instanceof Error ? err.message : 'Unknown error occurred';
+        throw new Error(`Failed to book appointment in Nextech: ${errorMsg}`);
+      }
     }
 
     // Check Prisma client support for fields (handles client not regenerated yet)

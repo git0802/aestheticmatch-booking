@@ -11,6 +11,7 @@ import { ProceduresModule } from './procedures/procedures.module';
 import { PracticesModule } from './practices/practices.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { MindbodyModule } from './mindbody/mindbody.module';
+import { NextechModule } from './nextech/nextech.module';
 import { EmrCredentialsModule } from './emr-credentials/emr-credentials.module';
 
 @Module({
@@ -27,6 +28,7 @@ import { EmrCredentialsModule } from './emr-credentials/emr-credentials.module';
     PracticesModule,
     AppointmentsModule,
     MindbodyModule,
+    NextechModule,
     EmrCredentialsModule,
   ],
   controllers: [AppController],

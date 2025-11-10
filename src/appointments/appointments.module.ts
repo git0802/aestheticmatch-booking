@@ -6,9 +6,10 @@ import { PracticesModule } from '../practices/practices.module';
 import { EncryptionService } from '../common/services/encryption.service';
 import { MindbodyService } from '../mindbody/mindbody.service';
 import { MindBodyClientService } from '../mindbody/mindbody-client.service';
+import { NextechModule } from '../nextech/nextech.module';
 
 @Module({
-  imports: [PrismaModule, PracticesModule],
+  imports: [PrismaModule, PracticesModule, NextechModule],
   controllers: [AppointmentsController],
   providers: [
     AppointmentsService,

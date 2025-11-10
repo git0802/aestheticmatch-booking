@@ -61,23 +61,27 @@ enum OwnerType {
 }
 
 model EmrCredential {
-  id                    String      @id @default(uuid()) @db.Uuid
-  provider              EmrProvider
-  ownerId               String      @map("owner_id") @db.Uuid
-  ownerType             OwnerType   @default(USER) @map("owner_type")
-  label                 String?     @db.VarChar(100)
-  locationId            String?     @map("location_id") @db.VarChar(100)
-  encryptedData         String      @map("encrypted_data") @db.Text
-  fingerprint           String      @unique @db.VarChar(128)
-  isValid               Boolean     @default(false) @map("is_valid")
-  lastValidatedAt       DateTime?   @map("last_validated_at")
-  validationError       String?     @map("validation_error") @db.Text
+  id                         String      @id @default(uuid()) @db.Uuid
+  provider                   EmrProvider
+  ownerId                    String      @map("owner_id") @db.Uuid
+  ownerType                  OwnerType   @default(USER) @map("owner_type")
+  label                      String?     @db.VarChar(100)
+  locationId                 String?     @map("location_id") @db.VarChar(100)
+  encryptedData              String      @map("encrypted_data") @db.Text
+  fingerprint                String      @unique @db.VarChar(128)
+  isValid                    Boolean     @default(false) @map("is_valid")
+  lastValidatedAt            DateTime?   @map("last_validated_at")
+  validationError            String?     @map("validation_error") @db.Text
   // Mindbody-specific configuration fields
-  mindbodyStaffId       String?     @map("mindbody_staff_id") @db.VarChar(50)
-  mindbodyLocationId    String?     @map("mindbody_location_id") @db.VarChar(50)
-  mindbodySessionTypeId String?     @map("mindbody_session_type_id") @db.VarChar(50)
-  createdAt             DateTime    @default(now()) @map("created_at")
-  updatedAt             DateTime    @updatedAt @map("updated_at")
+  mindbodyStaffId            String?     @map("mindbody_staff_id") @db.VarChar(50)
+  mindbodyLocationId         String?     @map("mindbody_location_id") @db.VarChar(50)
+  mindbodySessionTypeId      String?     @map("mindbody_session_type_id") @db.VarChar(50)
+  // Nextech-specific configuration fields
+  nextechProviderId          String?     @map("nextech_provider_id") @db.VarChar(50)
+  nextechLocationId          String?     @map("nextech_location_id") @db.VarChar(50)
+  nextechAppointmentTypeId   String?     @map("nextech_appointment_type_id") @db.VarChar(50)
+  createdAt                  DateTime    @default(now()) @map("created_at")
+  updatedAt                  DateTime    @updatedAt @map("updated_at")
 
   @@map("emr_credentials")
 }
@@ -98,6 +102,8 @@ model Patient {
   amReferralId              String?        @unique @map("am_referral_id") @db.VarChar(100)
   consentFormsSigned        Boolean?       @default(false) @map("consent_forms_signed")
   privacyNoticeAcknowledged Boolean?       @default(false) @map("privacy_notice_acknowledged")
+  // EMR Patient IDs
+  nextechPatientId          String?        @map("nextech_patient_id") @db.VarChar(100)
   createdBy                 String         @map("created_by")
   updatedBy                 String         @map("updated_by")
   createdAt                 DateTime       @default(now()) @map("created_at")

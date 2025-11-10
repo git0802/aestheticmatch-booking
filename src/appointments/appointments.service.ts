@@ -192,6 +192,12 @@ export class AppointmentsService {
             error: `Mindbody configuration incomplete. Please configure: ${!staffId ? 'Staff ID, ' : ''}${!locationId ? 'Location ID, ' : ''}${!sessionTypeId ? 'Session Type ID' : ''}`,
           };
         } else {
+          // Log the parameters being used for booking
+          this.logger.log(
+            `Attempting Mindbody booking with params: ` +
+              `staffId=${staffId}, locationId=${locationId}, sessionTypeId=${sessionTypeId}, clientId=${clientId}`,
+          );
+
           // Attempt booking
           const appointmentDate = new Date(createAppointmentDto.date);
 
@@ -248,8 +254,22 @@ export class AppointmentsService {
             this.logger.error(
               `Mindbody booking failed for patient ${patient.id}: ${errorMsg}`,
             );
+            
+            // Provide more helpful error messages for common issues
+            let enhancedError = errorMsg;
+            if (errorMsg.includes('not available for booking')) {
+              enhancedError = `${errorMsg}\n\nThis usually means:\n` +
+                `1. Staff availability has not been set up in Mindbody for this time slot\n` +
+                `2. The staff member (ID: ${staffId}) is not available at ${appointmentDate.toISOString()}\n` +
+                `3. The availability schedules need to be synced to Mindbody\n\n` +
+                `Please verify that staff availability has been added in Mindbody for:\n` +
+                `- Staff ID: ${staffId}\n` +
+                `- Location ID: ${locationId}\n` +
+                `- Date/Time: ${appointmentDate.toISOString()}`;
+            }
+            
             throw new Error(
-              `Failed to book appointment in Mindbody: ${errorMsg}`,
+              `Failed to book appointment in Mindbody: ${enhancedError}`,
             );
           }
         }

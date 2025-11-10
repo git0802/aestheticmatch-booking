@@ -999,4 +999,76 @@ export class MindbodyService {
       return { success: false, error: errorMessage };
     }
   }
+
+  /**
+   * Get staff availabilities from Mindbody for a specific date range
+   */
+  async getStaffAvailabilities(
+    credentials: MindbodyAuthCredentials,
+    params: {
+      staffIds?: number[];
+      locationIds?: number[];
+      startDateTime?: string; // ISO format
+      endDateTime?: string; // ISO format
+    },
+  ): Promise<{
+    success: boolean;
+    availabilities?: any[];
+    error?: string;
+  }> {
+    try {
+      const { accessToken, siteHeader } =
+        await this.issueUserToken(credentials);
+
+      let url = `${this.MINDBODY_API_BASE_URL}staff/staffavailabilities`;
+      const queryParams: string[] = [];
+
+      if (params.staffIds && params.staffIds.length > 0) {
+        queryParams.push(`staffIds=${params.staffIds.join(',')}`);
+      }
+      if (params.locationIds && params.locationIds.length > 0) {
+        queryParams.push(`locationIds=${params.locationIds.join(',')}`);
+      }
+      if (params.startDateTime) {
+        queryParams.push(`startDateTime=${encodeURIComponent(params.startDateTime)}`);
+      }
+      if (params.endDateTime) {
+        queryParams.push(`endDateTime=${encodeURIComponent(params.endDateTime)}`);
+      }
+
+      if (queryParams.length > 0) {
+        url += `?${queryParams.join('&')}`;
+      }
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: this.buildHeaders(credentials.apiKey, siteHeader, accessToken),
+      });
+
+      if (!response.ok) {
+        const errorData = await this.safeJson(response);
+        const msg =
+          errorData?.Error?.Message ||
+          errorData?.Message ||
+          `HTTP ${response.status}: ${response.statusText}`;
+        
+        this.logger.warn(`Failed to get staff availabilities from Mindbody: ${msg}`);
+        return {
+          success: false,
+          error: `Failed to get staff availabilities: ${msg}`,
+        };
+      }
+
+      const responseBody = await this.safeJson(response);
+      return {
+        success: true,
+        availabilities: responseBody?.Availabilities || [],
+      };
+    } catch (error) {
+      this.logger.error('Error getting Mindbody staff availabilities:', error);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred';
+      return { success: false, error: errorMessage };
+    }
+  }
 }

@@ -85,6 +85,22 @@ export class MindBodyClientService {
       context.sessionTypeId = decrypted.sessionTypeId as string | number;
     }
 
+    // Prioritize Mindbody-specific fields from the EMR credential record
+    if (emrCredential.mindbodyStaffId) {
+      context.staffId = emrCredential.mindbodyStaffId;
+    }
+    if (emrCredential.mindbodyLocationId) {
+      context.locationId = emrCredential.mindbodyLocationId;
+    }
+    if (emrCredential.mindbodySessionTypeId) {
+      context.sessionTypeId = emrCredential.mindbodySessionTypeId;
+    }
+
+    this.logger.log(
+      `Practice context for ${practiceId}: ` +
+        `staffId=${context.staffId}, locationId=${context.locationId}, sessionTypeId=${context.sessionTypeId}`,
+    );
+
     return context;
   }
 

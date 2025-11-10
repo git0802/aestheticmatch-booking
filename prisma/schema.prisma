@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
@@ -9,24 +9,24 @@ datasource db {
 }
 
 model User {
-  id           String     @id @default(cuid())
-  workosId     String     @unique @map("workos_id")
-  email        String     @unique
-  firstName    String     @map("first_name")
-  lastName     String     @map("last_name")
-  role         UserRole   @default(CONCIERGE)
-  status       UserStatus @default(ACTIVE)
-  emailVerified Boolean   @default(false) @map("email_verified")
-  lastLogin    DateTime?  @map("last_login")
-  createdAt    DateTime   @default(now()) @map("created_at")
-  updatedAt    DateTime   @updatedAt @map("updated_at")
+  id            String     @id @default(cuid())
+  workosId      String     @unique @map("workos_id")
+  email         String     @unique
+  firstName     String     @map("first_name")
+  lastName      String     @map("last_name")
+  role          UserRole   @default(CONCIERGE)
+  status        UserStatus @default(ACTIVE)
+  emailVerified Boolean    @default(false) @map("email_verified")
+  lastLogin     DateTime?  @map("last_login")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
 
   // Relations
-  createdPatients Patient[] @relation("PatientCreatedBy")
-  updatedPatients Patient[] @relation("PatientUpdatedBy")
+  createdPatients   Patient[]   @relation("PatientCreatedBy")
+  updatedPatients   Patient[]   @relation("PatientUpdatedBy")
   createdProcedures Procedure[] @relation("ProcedureCreatedBy")
   updatedProcedures Procedure[] @relation("ProcedureUpdatedBy")
-  createdPractices Practice[] @relation("PracticeCreatedBy")
+  createdPractices  Practice[]  @relation("PracticeCreatedBy")
 
   @@map("users")
 }
@@ -61,55 +61,55 @@ enum OwnerType {
 }
 
 model EmrCredential {
-  id                 String      @id @default(uuid()) @db.Uuid
-  provider           EmrProvider
-  ownerId            String      @map("owner_id") @db.Uuid
-  ownerType          OwnerType   @map("owner_type") @default(USER)
-  label              String?     @db.VarChar(100)
-  locationId         String?     @map("location_id") @db.VarChar(100)
-  encryptedData      String      @map("encrypted_data") @db.Text
-  fingerprint        String      @unique @db.VarChar(128)
-  isValid            Boolean     @default(false) @map("is_valid")
-  lastValidatedAt    DateTime?   @map("last_validated_at")
-  validationError    String?     @map("validation_error") @db.Text
+  id                    String      @id @default(uuid()) @db.Uuid
+  provider              EmrProvider
+  ownerId               String      @map("owner_id") @db.Uuid
+  ownerType             OwnerType   @default(USER) @map("owner_type")
+  label                 String?     @db.VarChar(100)
+  locationId            String?     @map("location_id") @db.VarChar(100)
+  encryptedData         String      @map("encrypted_data") @db.Text
+  fingerprint           String      @unique @db.VarChar(128)
+  isValid               Boolean     @default(false) @map("is_valid")
+  lastValidatedAt       DateTime?   @map("last_validated_at")
+  validationError       String?     @map("validation_error") @db.Text
   // Mindbody-specific configuration fields
-  mindbodyStaffId      String?  @map("mindbody_staff_id") @db.VarChar(50)
-  mindbodyLocationId   String?  @map("mindbody_location_id") @db.VarChar(50)
-  mindbodySessionTypeId String? @map("mindbody_session_type_id") @db.VarChar(50)
-  createdAt          DateTime    @default(now()) @map("created_at")
-  updatedAt          DateTime    @updatedAt @map("updated_at")
+  mindbodyStaffId       String?     @map("mindbody_staff_id") @db.VarChar(50)
+  mindbodyLocationId    String?     @map("mindbody_location_id") @db.VarChar(50)
+  mindbodySessionTypeId String?     @map("mindbody_session_type_id") @db.VarChar(50)
+  createdAt             DateTime    @default(now()) @map("created_at")
+  updatedAt             DateTime    @updatedAt @map("updated_at")
 
   @@map("emr_credentials")
 }
 
 model Patient {
-  id                        String    @id @default(uuid()) @db.Uuid
-  firstName                 String    @map("first_name") @db.VarChar(100)
-  lastName                  String    @map("last_name") @db.VarChar(155)
-  dob                       DateTime  @map("dob") @db.Date
-  email                     String    @unique @db.VarChar(255)
-  phone                     String?   @db.VarChar(25)
+  id                        String         @id @default(uuid()) @db.Uuid
+  firstName                 String         @map("first_name") @db.VarChar(100)
+  lastName                  String         @map("last_name") @db.VarChar(155)
+  dob                       DateTime       @map("dob") @db.Date
+  email                     String         @unique @db.VarChar(255)
+  phone                     String?        @db.VarChar(25)
   gender                    PatientGender? @map("gender")
-  notes                     String?   @db.Text
-  addressLine1              String?   @map("address_line1") @db.VarChar(255)
-  city                      String?   @db.VarChar(100)
-  state                     String?   @db.VarChar(50)
-  postalCode                String?   @map("postal_code") @db.VarChar(20)
-  amReferralId              String?   @unique @map("am_referral_id") @db.VarChar(100)
-  consentFormsSigned        Boolean?  @default(false) @map("consent_forms_signed")
-  privacyNoticeAcknowledged Boolean?  @default(false) @map("privacy_notice_acknowledged")
-  createdBy                 String    @map("created_by")
-  updatedBy                 String    @map("updated_by")
-  createdAt                 DateTime  @default(now()) @map("created_at")
-  updatedAt                 DateTime  @updatedAt @map("updated_at")
+  notes                     String?        @db.Text
+  addressLine1              String?        @map("address_line1") @db.VarChar(255)
+  city                      String?        @db.VarChar(100)
+  state                     String?        @db.VarChar(50)
+  postalCode                String?        @map("postal_code") @db.VarChar(20)
+  amReferralId              String?        @unique @map("am_referral_id") @db.VarChar(100)
+  consentFormsSigned        Boolean?       @default(false) @map("consent_forms_signed")
+  privacyNoticeAcknowledged Boolean?       @default(false) @map("privacy_notice_acknowledged")
+  createdBy                 String         @map("created_by")
+  updatedBy                 String         @map("updated_by")
+  createdAt                 DateTime       @default(now()) @map("created_at")
+  updatedAt                 DateTime       @updatedAt @map("updated_at")
 
   // Relations
-  createdByUser User @relation("PatientCreatedBy", fields: [createdBy], references: [id])
-  updatedByUser User @relation("PatientUpdatedBy", fields: [updatedBy], references: [id])
+  createdByUser User                 @relation("PatientCreatedBy", fields: [createdBy], references: [id])
+  updatedByUser User                 @relation("PatientUpdatedBy", fields: [updatedBy], references: [id])
   pastSurgeries PatientPastSurgery[]
-  allergies PatientAllergy[]
-  medications PatientMedication[]
-  healthFlags PatientHealthFlag[]
+  allergies     PatientAllergy[]
+  medications   PatientMedication[]
+  healthFlags   PatientHealthFlag[]
 
   appointments Appointment[]
 
@@ -192,65 +192,65 @@ enum FeeRule {
 }
 
 model Procedure {
-  id             String            @id @default(uuid()) @db.Uuid
-  name           String            @db.VarChar(255)
-  category       ProcedureCategory
-  defaultFeeRule FeeRule           @map("default_fee_rule")
-  feeAmount      Decimal           @map("fee_amount") @db.Decimal(10, 2)
-  linkedPractices String[]         @map("linked_practices") @db.Uuid
-  createdBy      String            @map("created_by")
-  updatedBy      String?           @map("updated_by")
-  createdAt      DateTime          @default(now()) @map("created_at")
-  updatedAt      DateTime          @updatedAt @map("updated_at")
+  id              String            @id @default(uuid()) @db.Uuid
+  name            String            @db.VarChar(255)
+  category        ProcedureCategory
+  defaultFeeRule  FeeRule           @map("default_fee_rule")
+  feeAmount       Decimal           @map("fee_amount") @db.Decimal(10, 2)
+  linkedPractices String[]          @map("linked_practices") @db.Uuid
+  createdBy       String            @map("created_by")
+  updatedBy       String?           @map("updated_by")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
 
   // Relations
-  createdByUser User @relation("ProcedureCreatedBy", fields: [createdBy], references: [id])
+  createdByUser User  @relation("ProcedureCreatedBy", fields: [createdBy], references: [id])
   updatedByUser User? @relation("ProcedureUpdatedBy", fields: [updatedBy], references: [id])
 
   @@map("procedures")
 }
 
 model Practice {
-  id               String   @id @default(uuid()) @db.Uuid
-  name             String   @db.VarChar(255)
-  emrType          String?  @map("emr_type") @db.VarChar(50)
-  createdAt        DateTime @default(now()) @map("created_at")
-  createdBy        String   @map("created_by")
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(255)
+  emrType   String?  @map("emr_type") @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at")
+  createdBy String   @map("created_by")
 
   // Relations
-  createdByUser    User     @relation("PracticeCreatedBy", fields: [createdBy], references: [id])
-  appointments     Appointment[]
-  serviceFees      ServiceFee[]
-  availabilities   PracticeAvailability[]
+  createdByUser  User                   @relation("PracticeCreatedBy", fields: [createdBy], references: [id])
+  appointments   Appointment[]
+  serviceFees    ServiceFee[]
+  availabilities PracticeAvailability[]
 
   @@map("practices")
 }
 
 model PracticeAvailability {
-  id            String     @id @default(uuid()) @db.Uuid
-  practiceId    String     @map("practice_id") @db.Uuid
-  startDateTime DateTime   @map("start_date_time")
-  endDateTime   DateTime   @map("end_date_time")
-  createdAt     DateTime   @default(now()) @map("created_at")
-  updatedAt     DateTime   @updatedAt @map("updated_at")
+  id            String   @id @default(uuid()) @db.Uuid
+  practiceId    String   @map("practice_id") @db.Uuid
+  startDateTime DateTime @map("start_date_time")
+  endDateTime   DateTime @map("end_date_time")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   // Relations
-  practice      Practice   @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  practice Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
 
   @@map("practice_availabilities")
 }
 
 model ServiceFee {
-  id           String   @id @default(uuid()) @db.Uuid
-  practiceId   String   @map("practice_id") @db.Uuid
-  serviceName  String   @map("service_name") @db.VarChar(255)
-  serviceType  ServiceType @map("service_type") @default(consult)
-  price        Decimal  @db.Decimal(10, 2)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id          String      @id @default(uuid()) @db.Uuid
+  practiceId  String      @map("practice_id") @db.Uuid
+  serviceName String      @map("service_name") @db.VarChar(255)
+  serviceType ServiceType @default(consult) @map("service_type")
+  price       Decimal     @db.Decimal(10, 2)
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
 
   // Relations
-  practice     Practice @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  practice     Practice      @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   appointments Appointment[] @relation("ServiceFeeAppointments")
 
   // Ensure we can reference (id, practiceId) from appointments to enforce practice consistency
@@ -278,40 +278,40 @@ enum AppointmentMode {
 }
 
 model Appointment {
-  id                String            @id @default(uuid()) @db.Uuid
-  patientId         String            @map("patient_id") @db.Uuid
-  practiceId        String            @map("practice_id") @db.Uuid
-  appointmentType   AppointmentType   @map("appointment_type")
-  status            AppointmentStatus @map("status")
-  mode              AppointmentMode   @map("mode") @default(in_person)
-  date              DateTime          @db.Timestamp(6)
-  isReturnVisit     Boolean           @default(false) @map("is_return_visit")
-  emrAppointmentId  String?           @map("emr_appointment_id") @db.VarChar(100)
+  id               String            @id @default(uuid()) @db.Uuid
+  patientId        String            @map("patient_id") @db.Uuid
+  practiceId       String            @map("practice_id") @db.Uuid
+  appointmentType  AppointmentType   @map("appointment_type")
+  status           AppointmentStatus @map("status")
+  mode             AppointmentMode   @default(in_person) @map("mode")
+  date             DateTime          @db.Timestamp(6)
+  isReturnVisit    Boolean           @default(false) @map("is_return_visit")
+  emrAppointmentId String?           @map("emr_appointment_id") @db.VarChar(100)
   // New service selection fields
-  serviceFeeId      String?           @map("service_fee_id") @db.Uuid
-  serviceName       String?           @map("service_name") @db.VarChar(255)
-  serviceType       ServiceType?      @map("service_type")
-  servicePrice      Decimal?          @map("service_price") @db.Decimal(10, 2)
-  feeAmount         Decimal?          @map("fee_amount") @db.Decimal(10, 2)
-  createdAt         DateTime          @default(now()) @map("created_at")
+  serviceFeeId     String?           @map("service_fee_id") @db.Uuid
+  serviceName      String?           @map("service_name") @db.VarChar(255)
+  serviceType      ServiceType?      @map("service_type")
+  servicePrice     Decimal?          @map("service_price") @db.Decimal(10, 2)
+  feeAmount        Decimal?          @map("fee_amount") @db.Decimal(10, 2)
+  createdAt        DateTime          @default(now()) @map("created_at")
 
   // Relations
-  patient           Patient           @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  practice          Practice          @relation(fields: [practiceId], references: [id], onDelete: Cascade)
+  patient    Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  practice   Practice    @relation(fields: [practiceId], references: [id], onDelete: Cascade)
   // Enforce that selected service belongs to the same practice via composite relation
-  serviceFee        ServiceFee?       @relation("ServiceFeeAppointments", fields: [serviceFeeId, practiceId], references: [id, practiceId])
+  serviceFee ServiceFee? @relation("ServiceFeeAppointments", fields: [serviceFeeId, practiceId], references: [id, practiceId])
 
   @@map("appointments")
 }
 
 // Global fee settings for consult, surgery, and non-surgical.
 model FeeSettings {
-  id               String   @id @default(uuid()) @db.Uuid
-  consultFee       Decimal  @db.Decimal(10, 2)
-  surgeryFee       Decimal  @db.Decimal(10, 2)
-  nonSurgicalFee   Decimal  @db.Decimal(10, 2)
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(uuid()) @db.Uuid
+  consultFee     Decimal  @db.Decimal(10, 2)
+  surgeryFee     Decimal  @db.Decimal(10, 2)
+  nonSurgicalFee Decimal  @db.Decimal(10, 2)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   @@map("fee_settings")
 }

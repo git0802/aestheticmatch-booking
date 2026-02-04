@@ -7,9 +7,10 @@ import { EncryptionService } from '../common/services/encryption.service';
 import { MindbodyService } from '../mindbody/mindbody.service';
 import { MindBodyClientService } from '../mindbody/mindbody-client.service';
 import { NextechModule } from '../nextech/nextech.module';
+import { ModmedModule } from '../modmed/modmed.module';
 
 @Module({
-  imports: [PrismaModule, PracticesModule, NextechModule],
+  imports: [PrismaModule, PracticesModule, NextechModule, ModmedModule],
   controllers: [AppointmentsController],
   providers: [
     AppointmentsService,

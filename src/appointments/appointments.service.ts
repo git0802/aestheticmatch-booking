@@ -17,6 +17,8 @@ import { MindbodyService } from '../mindbody/mindbody.service';
 import { MindBodyClientService } from '../mindbody/mindbody-client.service';
 import { NextechService } from '../nextech/nextech.service';
 import { NextechClientService } from '../nextech/nextech-client.service';
+import { ModmedService } from '../modmed/modmed.service';
+import { ModmedClientService } from '../modmed/modmed-client.service';
 import { PracticesService } from '../practices/practices.service';
 
 @Injectable()
@@ -30,6 +32,8 @@ export class AppointmentsService {
     private mindbodyClient: MindBodyClientService,
     private nextech: NextechService,
     private nextechClient: NextechClientService,
+    private modmed: ModmedService,
+    private modmedClient: ModmedClientService,
     private practicesService: PracticesService,
   ) {}
 
@@ -452,6 +456,86 @@ export class AppointmentsService {
         const errorMsg =
           err instanceof Error ? err.message : 'Unknown error occurred';
         throw new Error(`Failed to book appointment in Nextech: ${errorMsg}`);
+      }
+    }
+
+    // Attempt EMR booking for ModMed if not already booked in Mindbody or Nextech
+    if (!emrAppointmentId) {
+      try {
+        const modmedEmr = await (this.prisma as any).emrCredential.findFirst({
+          where: {
+            ownerId: practice.id,
+            ownerType: 'PRACTICE',
+            provider: 'MODMED',
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+
+        if (modmedEmr?.encryptedData) {
+          this.logger.log(
+            `Found ModMed credentials for practice ${practice.id}, attempting booking`,
+          );
+
+          // Book appointment through ModMed client service
+          const appointmentDate = new Date(createAppointmentDto.date);
+          
+          const bookingResult = await this.modmedClient.bookForPractice({
+            practiceId: practice.id,
+            patient: {
+              id: patient.id,
+              firstName: patient.firstName || 'Patient',
+              lastName: patient.lastName || 'Unknown',
+              email: patient.email || '',
+              phone: patient.phone || undefined,
+              dateOfBirth: patient.dob || undefined,
+            },
+            appointment: {
+              startDateTime: appointmentDate,
+              duration: 30, // Default 30 minutes, can be made configurable
+              notes: `AestheticMatch booking for patient ${patient.id}`,
+            },
+          });
+
+          emrBookingResult = bookingResult;
+          this.logger.log(
+            `ModMed booking result for patient ${patient.id}:`,
+            JSON.stringify(bookingResult),
+          );
+
+          if (bookingResult.success && bookingResult.appointmentId) {
+            emrAppointmentId = bookingResult.appointmentId;
+            this.logger.log(
+              `ModMed booking successful with appointment ID: ${emrAppointmentId}`,
+            );
+          } else if (!bookingResult.success) {
+            const errorMsg =
+              bookingResult.error || 'Unknown error during ModMed booking';
+            this.logger.error(
+              `ModMed booking failed for patient ${patient.id}: ${errorMsg}`,
+            );
+
+            let enhancedError = errorMsg;
+            if (errorMsg.includes('not available') || errorMsg.includes('configuration')) {
+              enhancedError = `${errorMsg}\n\nThis usually means:\n` +
+                `1. Provider, location, or appointment type configuration is missing\n` +
+                `2. The provider is not available at ${appointmentDate.toISOString()}\n\n` +
+                `Please verify ModMed configuration for practice ${practice.id}`;
+            }
+
+            throw new Error(
+              `Failed to book appointment in ModMed: ${enhancedError}`,
+            );
+          }
+        } else {
+          this.logger.log(
+            `No ModMed credentials found for practice ${practice.id}`,
+          );
+        }
+      } catch (err) {
+        this.logger.error('ModMed booking error', err);
+        const errorMsg =
+          err instanceof Error ? err.message : 'Unknown error occurred';
+        throw new Error(`Failed to book appointment in ModMed: ${errorMsg}`);
       }
     }
 
